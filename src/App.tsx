@@ -193,7 +193,7 @@ export default function App(){
     const rows=members.map(m=>{
       const{list,bruto,liquido}=calcMes(m.id,year,month);
       if(!list.length) return"";
-      const byTipo={};
+      const byTipo:{[k:string]:{label:string,color:string,datas:string[],bruto:number,liquido:number}}={};
       list.forEach(sh=>{
         const t=stOf(sh.tipo); const tar=tarifas[sh.tipo]||{bruto:0,liquido:0};
         if(!byTipo[sh.tipo]) byTipo[sh.tipo]={label:t.label,color:t.color,datas:[],bruto:0,liquido:0};
