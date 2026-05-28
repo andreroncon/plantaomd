@@ -396,14 +396,17 @@ export default function App(){
         {todayS.map(sh=>{
           const t=stOf(sh.tipo); const sub=sh.substitutoId?mById(sh.substitutoId):null;
           return(
-            <div key={sh.id} onClick={()=>setModal({type:"editShift",shiftId:sh.id})}
-              style={{...s.card,borderLeft:`3px solid ${t.color}`,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
-              <div style={{flex:1}}>
+            <div key={sh.id}
+              style={{...s.card,borderLeft:`3px solid ${t.color}`,display:"flex",alignItems:"center",gap:10}}>
+              <div style={{flex:1,cursor:"pointer"}} onClick={()=>setModal({type:"editShift",shiftId:sh.id})}>
                 <div style={{...s.row,gap:6,marginBottom:3}}><span style={s.bdg(t.color,t.bg)}>{t.label}</span><span style={{fontSize:12,color:"var(--color-text-secondary)"}}>{sh.inicio}–{sh.fim}</span></div>
                 <div style={{fontSize:13,fontWeight:500}}>{mName(sh.membroId)}</div>
                 {sub&&<div style={{fontSize:12,color:t.color}}>Sub.: {sub.nome}</div>}
               </div>
-              <span style={{color:"var(--color-text-secondary)",fontSize:18}}>›</span>
+              {isAdmin
+                ? <button style={{...s.out,color:"#A32D2D",fontSize:13,padding:"6px 10px",flexShrink:0}} onClick={e=>{e.stopPropagation();delShift(sh.id);}}>✕</button>
+                : <span style={{color:"var(--color-text-secondary)",fontSize:18}}>›</span>
+              }
             </div>
           );
         })}
