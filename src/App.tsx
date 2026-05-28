@@ -338,7 +338,7 @@ export default function App(){
             <button style={s.btn()} onClick={()=>{changeResp(sh.id,sr);setEr(false);}}>OK</button>
           </div>}
         </div>}
-        {isAdmin&&sh.status==="agendado"&&<div style={{marginBottom:8}}>
+        {sh.status==="agendado"&&<div style={{marginBottom:8}}>
           <div style={{...s.row,justifyContent:"space-between",marginBottom:4}}>
             <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>Substituição pontual</span>
             {sub?<button style={{...s.out,fontSize:11,padding:"3px 8px",color:"#A32D2D"}} onClick={()=>cancelSub(sh.id)}>Cancelar sub.</button>
