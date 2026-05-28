@@ -288,8 +288,9 @@ export default function App(){
         <button style={{...s.btn(),width:"100%",padding:"11px"}} onClick={doLogin}>Entrar</button>
         <div style={{marginTop:14,fontSize:11,color:"var(--color-text-secondary)",textAlign:"center",lineHeight:1.8}}>
           Admin: <b>admin</b> / <b>admin123</b><br/>
-          Médico: login = nº CRM-SP · senha = 3 iniciais + 123<br/>
-          Ex: Andre Dias → <b>112000</b> / <b>and123</b>
+          Médico: login = nº CRM-SP · senha = iniciais + 123<br/>
+          Ex: Andre Dias → <b>112000</b> / <b>ad123</b><br/>
+          Ex: Amilcar Martinez → <b>100101</b> / <b>am123</b>
         </div>
       </div>
     </div>
@@ -337,7 +338,7 @@ export default function App(){
             <button style={s.btn()} onClick={()=>{changeResp(sh.id,sr);setEr(false);}}>OK</button>
           </div>}
         </div>}
-        {sh.status==="agendado"&&<div style={{marginBottom:8}}>
+        {isAdmin&&sh.status==="agendado"&&<div style={{marginBottom:8}}>
           <div style={{...s.row,justifyContent:"space-between",marginBottom:4}}>
             <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>Substituição pontual</span>
             {sub?<button style={{...s.out,fontSize:11,padding:"3px 8px",color:"#A32D2D"}} onClick={()=>cancelSub(sh.id)}>Cancelar sub.</button>
