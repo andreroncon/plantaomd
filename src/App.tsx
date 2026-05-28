@@ -1,4 +1,17 @@
 import { useState, useRef, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  "https://jyuekaadflsvupubwefx.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp5dWVrYWFkZmxzdnVwdWJ3ZWZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5OTUxOTYsImV4cCI6MjA5NTU3MTE5Nn0.tVsgWk_tt0Dwyv_-ODRTHKRg1Yv0yrnJa5KEcswGa_Q"
+);
+
+function dbToShift(s: any) {
+  return { id: s.id, membroId: s.membro_id, data: s.data, inicio: s.inicio, fim: s.fim, tipo: s.tipo, status: s.status, checkIn: s.check_in, checkOut: s.check_out, substitutoId: s.substituto_id };
+}
+function shiftToDb(s: any) {
+  return { membro_id: s.membroId, data: s.data, inicio: s.inicio, fim: s.fim, tipo: s.tipo, status: s.status||"agendado", check_in: s.checkIn||null, check_out: s.checkOut||null, substituto_id: s.substitutoId||null };
+}
 
 const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const DAYS   = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
@@ -13,54 +26,58 @@ const INIT_SHIFT_TYPES = [
   {id:"cobertura_ps", label:"Cobertura PS",     color:"#A32D2D", bg:"#FCEBEB"},
 ];
 
-const DEFAULT_TARIFAS = Object.fromEntries(
-  INIT_SHIFT_TYPES.map(t=>[t.id,{bruto:1000,liquido:800}])
-);
+const DEFAULT_TARIFAS = Object.fromEntries(INIT_SHIFT_TYPES.map(t=>[t.id,{bruto:1000,liquido:800}]));
 
 let _uid = Date.now();
 const uid = () => ++_uid;
 
-function localDateStr(d){
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
+function localDateStr(d: Date){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function initSenha(nome: string){ return nome.trim().toLowerCase().replace(/\s+/g," ").split(" ").map((p:string)=>p[0]).join("").slice(0,3)+"123"; }
 
-function initSenha(nome){
-  return nome.trim().toLowerCase().replace(/\s+/g," ").split(" ").map(p=>p[0]).join("").slice(0,3)+"123";
-}
-
-const INIT_MEMBERS: any[] = [];
-
-function generateShifts(){ return []; }
-
-const stColor={ativo:"#0F6E56",agendado:"#185FA5",concluido:"#5F5E5A"};
-const stLabel={ativo:"Em plantão",agendado:"Agendado",concluido:"Concluído"};
+const stColor: any={ativo:"#0F6E56",agendado:"#185FA5",concluido:"#5F5E5A"};
+const stLabel: any={ativo:"Em plantão",agendado:"Agendado",concluido:"Concluído"};
 
 export default function App(){
-  const [user,setUser]   = useState(null);
+  const [user,setUser]   = useState<any>(null);
   const [lf,setLf]       = useState({crm:"",senha:"",tipo:"medico"});
   const [lErr,setLErr]   = useState("");
   const [tab,setTab]     = useState("escala");
-  const [members,setMembers]           = useState(INIT_MEMBERS);
-  const [shifts,setShifts]             = useState(generateShifts);
+  const [members,setMembers]           = useState<any[]>([]);
+  const [shifts,setShifts]             = useState<any[]>([]);
   const [stypes,setStypes]             = useState(INIT_SHIFT_TYPES);
   const [tarifas,setTarifas]           = useState(DEFAULT_TARIFAS);
-  const [savedReports,setSavedReports] = useState([]);
-  const [selDate,setSelDate]           = useState("2026-05-19");
-  const [calM,setCalM] = useState(4);
-  const [calY,setCalY] = useState(2026);
-  const [modal,setModal]   = useState(null);
-  const [notifs,setNotifs] = useState([]);
+  const [savedReports,setSavedReports] = useState<any[]>([]);
+  const [selDate,setSelDate]           = useState(localDateStr(new Date()));
+  const [calM,setCalM] = useState(new Date().getMonth());
+  const [calY,setCalY] = useState(new Date().getFullYear());
+  const [modal,setModal]   = useState<any>(null);
+  const [notifs,setNotifs] = useState<any[]>([]);
   const [showNotifs,setShowNotifs] = useState(false);
+  const [loading,setLoading] = useState(true);
   const nid = useRef(100);
+
+  // ── CARREGAR DADOS DO SUPABASE ─────────────────────────────────────────────
+  useEffect(()=>{
+    async function load(){
+      const [{ data: mData },{ data: sData }] = await Promise.all([
+        supabase.from("members").select("*").order("id"),
+        supabase.from("shifts").select("*").order("id"),
+      ]);
+      if(mData) setMembers(mData);
+      if(sData) setShifts(sData.map(dbToShift));
+      setLoading(false);
+    }
+    load();
+  },[]);
 
   const isAdmin = user?.role==="admin";
   const myId    = user?.memberId;
-  const stOf    = id=>stypes.find(t=>t.id===id)||stypes[0];
-  const mById   = id=>members.find(m=>m.id===id);
-  const mName   = id=>mById(id)?.nome||"—";
-  const getDIM  = (y,m)=>new Date(y,m+1,0).getDate();
-  const getFD   = (y,m)=>new Date(y,m,1).getDay();
-  const addNotif= (txt,mId)=>setNotifs(p=>[{id:nid.current++,text:txt,membId:mId||null,read:false},...p]);
+  const stOf    = (id: string) => stypes.find(t=>t.id===id)||stypes[0];
+  const mById   = (id: number) => members.find(m=>m.id===id);
+  const mName   = (id: number) => mById(id)?.nome||"—";
+  const getDIM  = (y: number,m: number)=>new Date(y,m+1,0).getDate();
+  const getFD   = (y: number,m: number)=>new Date(y,m,1).getDay();
+  const addNotif= (txt: string,mId: any)=>setNotifs(p=>[{id:nid.current++,text:txt,membId:mId||null,read:false},...p]);
   const unread  = notifs.filter(n=>!n.read&&(isAdmin||n.membId===myId||n.membId===null)).length;
 
   useEffect(()=>{
@@ -68,10 +85,7 @@ export default function App(){
     const amanha=new Date(); amanha.setDate(amanha.getDate()+1);
     const ds=localDateStr(amanha);
     shifts.filter(s=>(s.membroId===myId||s.substitutoId===myId)&&s.data===ds&&s.status==="agendado")
-      .forEach(sh=>{
-        const t=stOf(sh.tipo);
-        addNotif(`🔔 Lembrete: plantão amanhã (${ds}) — ${t.label} das ${sh.inicio} às ${sh.fim}`,myId);
-      });
+      .forEach(sh=>{ const t=stOf(sh.tipo); addNotif(`🔔 Lembrete: plantão amanhã (${ds}) — ${t.label} das ${sh.inicio} às ${sh.fim}`,myId); });
   },[user]);
 
   function doLogin(){
@@ -82,107 +96,64 @@ export default function App(){
     }
     const crm=lf.crm.trim(), pw=lf.senha.trim();
     if(!crm||!pw){setLErr("Informe CRM-SP e senha.");return;}
-    const m=members.find(x=>x.ativo&&x.crmsp===crm&&x.senha===pw);
+    const m=members.find((x:any)=>x.ativo&&x.crmsp===crm&&x.senha===pw);
     if(m){setUser({role:"medico",memberId:m.id,nome:m.nome});setLErr("");}
-    else{
-      const bl=members.find(x=>!x.ativo&&x.crmsp===crm);
-      setLErr(bl?"Acesso bloqueado. Contate o administrador.":"CRM ou senha inválidos.");
-    }
+    else{ const bl=members.find((x:any)=>!x.ativo&&x.crmsp===crm); setLErr(bl?"Acesso bloqueado. Contate o administrador.":"CRM ou senha inválidos."); }
   }
 
-  function shiftsForDay(d){
+  function shiftsForDay(d: number){
     const ds=`${calY}-${String(calM+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
     return shifts.filter(s=>s.data===ds);
   }
-  const checkin  = sid=>{const h=new Date().toTimeString().slice(0,5);setShifts(p=>p.map(s=>s.id===sid?{...s,status:"ativo",checkIn:h}:s));};
-  const checkout = sid=>{const h=new Date().toTimeString().slice(0,5);setShifts(p=>p.map(s=>s.id===sid?{...s,status:"concluido",checkOut:h}:s));};
-  const delShift = sid=>setShifts(p=>p.filter(s=>s.id!==sid));
-  const changeResp=(sid,nId)=>setShifts(p=>p.map(s=>s.id===sid?{...s,membroId:Number(nId),substitutoId:null}:s));
-  function setSub(sid,subId){
+
+  const checkin  = async(sid: number)=>{ const h=new Date().toTimeString().slice(0,5); await supabase.from("shifts").update({status:"ativo",check_in:h}).eq("id",sid); setShifts(p=>p.map(s=>s.id===sid?{...s,status:"ativo",checkIn:h}:s)); };
+  const checkout = async(sid: number)=>{ const h=new Date().toTimeString().slice(0,5); await supabase.from("shifts").update({status:"concluido",check_out:h}).eq("id",sid); setShifts(p=>p.map(s=>s.id===sid?{...s,status:"concluido",checkOut:h}:s)); };
+  const delShift = async(sid: number)=>{ await supabase.from("shifts").delete().eq("id",sid); setShifts(p=>p.filter(s=>s.id!==sid)); };
+  const changeResp = async(sid: number,nId: number)=>{ await supabase.from("shifts").update({membro_id:Number(nId),substituto_id:null}).eq("id",sid); setShifts(p=>p.map(s=>s.id===sid?{...s,membroId:Number(nId),substitutoId:null}:s)); };
+
+  async function setSub(sid: number,subId: number){
+    await supabase.from("shifts").update({substituto_id:Number(subId)}).eq("id",sid);
     setShifts(p=>p.map(s=>s.id===sid?{...s,substitutoId:Number(subId)}:s));
     const sh=shifts.find(s=>s.id===sid);
     if(sh) addNotif(`${mName(Number(subId))} assumiu plantão de ${mName(sh.membroId)} em ${sh.data}`,null);
   }
-  const cancelSub=sid=>setShifts(p=>p.map(s=>s.id===sid?{...s,substitutoId:null}:s));
+  const cancelSub = async(sid: number)=>{ await supabase.from("shifts").update({substituto_id:null}).eq("id",sid); setShifts(p=>p.map(s=>s.id===sid?{...s,substitutoId:null}:s)); };
 
-  function calcMes(membId,year,month){
+  function calcMes(membId: number,year: number,month: number){
     const m=mById(membId); if(!m) return{bruto:0,liquido:0,list:[]};
     const key=`${year}-${String(month+1).padStart(2,"0")}`;
-    const done=shifts.filter(s=>{
-      if(s.status!=="concluido"||!s.data.startsWith(key)) return false;
-      return (s.substitutoId||s.membroId)===membId;
-    });
+    const done=shifts.filter(s=>{ if(s.status!=="concluido"||!s.data.startsWith(key)) return false; return (s.substitutoId||s.membroId)===membId; });
     let bruto=0,liquido=0;
-    done.forEach(s=>{const tar=tarifas[s.tipo]||{bruto:0,liquido:0};bruto+=tar.bruto;liquido+=tar.liquido;});
+    done.forEach(s=>{ const tar=(tarifas as any)[s.tipo]||{bruto:0,liquido:0}; bruto+=tar.bruto; liquido+=tar.liquido; });
     return{bruto,liquido,list:done};
   }
 
-  function buildReportHTML(membId,year,month,adminView){
+  function buildReportHTML(membId: number,year: number,month: number,adminView: boolean){
     const m=mById(membId); if(!m) return"";
     const{bruto,liquido,list}=calcMes(membId,year,month);
-    const rows=list.map(sh=>{
-      const t=stOf(sh.tipo); const tar=tarifas[sh.tipo]||{bruto:0,liquido:0};
-      return`<tr><td>${new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")}</td><td style="color:${t.color}">${t.label}</td><td>${sh.inicio}–${sh.fim}</td><td>${mName(sh.membroId)}</td><td>${sh.substitutoId?mName(sh.substitutoId):"—"}</td>${adminView?`<td>R$ ${tar.bruto.toLocaleString("pt-BR")}</td>`:""}<td>R$ ${tar.liquido.toLocaleString("pt-BR")}</td></tr>`;
-    }).join("");
+    const rows=list.map(sh=>{ const t=stOf(sh.tipo); const tar=(tarifas as any)[sh.tipo]||{bruto:0,liquido:0}; return`<tr><td>${new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")}</td><td style="color:${t.color}">${t.label}</td><td>${sh.inicio}–${sh.fim}</td><td>${mName(sh.membroId)}</td><td>${sh.substitutoId?mName(sh.substitutoId):"—"}</td>${adminView?`<td>R$ ${tar.bruto.toLocaleString("pt-BR")}</td>`:""}<td>R$ ${tar.liquido.toLocaleString("pt-BR")}</td></tr>`; }).join("");
     return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório ${MONTHS[month]}/${year} – ${m.nome}</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#222}h1{color:#185FA5;font-size:18px}.sub{color:#555;font-size:13px;margin-bottom:16px}.sum{display:flex;gap:20px;margin:16px 0;padding:12px;background:#f0f6ff;border-radius:8px}.sl{font-size:11px;color:#555}.sv{font-size:16px;font-weight:bold;color:#185FA5}table{width:100%;border-collapse:collapse;font-size:11px;margin-top:12px}th{background:#185FA5;color:#fff;padding:7px 5px;text-align:left}td{padding:6px 5px;border-bottom:1px solid #eee}.ft{margin-top:20px;font-size:10px;color:#aaa}</style></head><body><h1>Relatório de Plantões — ${MONTHS[month]} ${year}</h1><div class="sub">${m.nome} · CRM-SP: ${m.crmsp||""} · ${m.esp}</div><div class="sum"><div><div class="sl">Plantões</div><div class="sv">${list.length}</div></div>${adminView?`<div><div class="sl">Bruto</div><div class="sv">R$ ${bruto.toLocaleString("pt-BR")}</div></div>`:""}<div><div class="sl">Líquido</div><div class="sv">R$ ${liquido.toLocaleString("pt-BR")}</div></div></div><table><thead><tr><th>Data</th><th>Tipo</th><th>Horário</th><th>Responsável</th><th>Substituto</th>${adminView?"<th>Bruto</th>":""}<th>Líquido</th></tr></thead><tbody>${rows}</tbody></table><div class="ft">Gerado em ${new Date().toLocaleString("pt-BR")} · PlantãoMed</div></body></html>`;
   }
 
-  function buildTeamReportHTML(year,month){
-    const rows=members.map(m=>{
-      const{list,bruto,liquido}=calcMes(m.id,year,month);
-      if(!list.length) return"";
-      const byTipo:{[k:string]:{label:string,color:string,datas:string[],bruto:number,liquido:number}}={};
-      list.forEach(sh=>{
-        const t=stOf(sh.tipo); const tar=tarifas[sh.tipo]||{bruto:0,liquido:0};
-        if(!byTipo[sh.tipo]) byTipo[sh.tipo]={label:t.label,color:t.color,datas:[],bruto:0,liquido:0};
-        byTipo[sh.tipo].datas.push(new Date(sh.data+"T12:00").toLocaleDateString("pt-BR"));
-        byTipo[sh.tipo].bruto+=tar.bruto; byTipo[sh.tipo].liquido+=tar.liquido;
-      });
-      const tipoRows=Object.values(byTipo).map(v=>`<tr><td style="padding-left:20px;color:${v.color}">${v.label}</td><td style="font-size:10px">${v.datas.join(", ")}</td><td>R$ ${v.bruto.toLocaleString("pt-BR")}</td><td>R$ ${v.liquido.toLocaleString("pt-BR")}</td></tr>`).join("");
-      return`<tr style="background:#e8f0fe"><td colspan="4" style="padding:8px 6px;font-weight:bold;color:#185FA5">${m.nome} — ${list.length} plantão(ões) · Bruto: R$ ${bruto.toLocaleString("pt-BR")} · Líquido: R$ ${liquido.toLocaleString("pt-BR")}</td></tr>${tipoRows}`;
-    }).filter(Boolean).join("");
+  function buildTeamReportHTML(year: number,month: number){
+    const rows=members.map(m=>{ const{list,bruto,liquido}=calcMes(m.id,year,month); if(!list.length) return""; const byTipo:{[k:string]:{label:string,color:string,datas:string[],bruto:number,liquido:number}}={}; list.forEach(sh=>{ const t=stOf(sh.tipo); const tar=(tarifas as any)[sh.tipo]||{bruto:0,liquido:0}; if(!byTipo[sh.tipo]) byTipo[sh.tipo]={label:t.label,color:t.color,datas:[],bruto:0,liquido:0}; byTipo[sh.tipo].datas.push(new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")); byTipo[sh.tipo].bruto+=tar.bruto; byTipo[sh.tipo].liquido+=tar.liquido; }); const tipoRows=Object.values(byTipo).map(v=>`<tr><td style="padding-left:20px;color:${v.color}">${v.label}</td><td style="font-size:10px">${v.datas.join(", ")}</td><td>R$ ${v.bruto.toLocaleString("pt-BR")}</td><td>R$ ${v.liquido.toLocaleString("pt-BR")}</td></tr>`).join(""); return`<tr style="background:#e8f0fe"><td colspan="4" style="padding:8px 6px;font-weight:bold;color:#185FA5">${m.nome} — ${list.length} plantão(ões) · Bruto: R$ ${bruto.toLocaleString("pt-BR")} · Líquido: R$ ${liquido.toLocaleString("pt-BR")}</td></tr>${tipoRows}`; }).filter(Boolean).join("");
     return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório Equipe ${MONTHS[month]}/${year}</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#222}h1{color:#185FA5;font-size:18px}table{width:100%;border-collapse:collapse;font-size:11px;margin-top:16px}th{background:#185FA5;color:#fff;padding:8px 6px;text-align:left}td{padding:6px;border-bottom:1px solid #eee}.ft{margin-top:20px;font-size:10px;color:#aaa}</style></head><body><h1>Relatório da Equipe — ${MONTHS[month]} ${year}</h1><table><thead><tr><th>Tipo</th><th>Datas</th><th>Bruto</th><th>Líquido</th></tr></thead><tbody>${rows}</tbody></table><div class="ft">Gerado em ${new Date().toLocaleString("pt-BR")} · PlantãoMed</div></body></html>`;
   }
 
-  function openHTML(html){
-    const blob=new Blob([html],{type:"text/html;charset=utf-8"});
-    const url=URL.createObjectURL(blob);
-    const w=window.open(url,"_blank");
-    if(!w){const a=document.createElement("a");a.href=url;a.download="relatorio.html";document.body.appendChild(a);a.click();a.remove();}
-    setTimeout(()=>URL.revokeObjectURL(url),60000);
-  }
+  function openHTML(html: string){ const blob=new Blob([html],{type:"text/html;charset=utf-8"}); const url=URL.createObjectURL(blob); const w=window.open(url,"_blank"); if(!w){const a=document.createElement("a");a.href=url;a.download="relatorio.html";document.body.appendChild(a);a.click();a.remove();} setTimeout(()=>URL.revokeObjectURL(url),60000); }
+  function saveReport(title: string,html: string,membId: any){ setSavedReports(p=>{ const f=p.filter(r=>r.title!==title); return [{id:uid(),title,html,date:new Date().toLocaleString("pt-BR"),membId:membId||null},...f]; }); }
+  function gerarRelatorio(membId: number,year: number,month: number,adminView: boolean){ const m=mById(membId); if(!m) return; const html=buildReportHTML(membId,year,month,adminView); const title=`Relatório ${MONTHS[month]}/${year} – ${m.nome}`; saveReport(title,html,membId); openHTML(html); }
+  function gerarRelatorioEquipe(year: number,month: number){ const html=buildTeamReportHTML(year,month); const title=`Relatório Equipe — ${MONTHS[month]}/${year}`; saveReport(title,html,null); openHTML(html); }
 
-  function saveReport(title,html,membId){
-    setSavedReports(p=>{
-      const f=p.filter(r=>r.title!==title);
-      return [{id:uid(),title,html,date:new Date().toLocaleString("pt-BR"),membId:membId||null},...f];
-    });
-  }
-
-  function gerarRelatorio(membId,year,month,adminView){
-    const m=mById(membId); if(!m) return;
-    const html=buildReportHTML(membId,year,month,adminView);
-    const title=`Relatório ${MONTHS[month]}/${year} – ${m.nome}`;
-    saveReport(title,html,membId);
-    openHTML(html);
-  }
-
-  function gerarRelatorioEquipe(year,month){
-    const html=buildTeamReportHTML(year,month);
-    const title=`Relatório Equipe — ${MONTHS[month]}/${year}`;
-    saveReport(title,html,null);
-    openHTML(html);
-  }
-
-  const s={
+  const s: any = {
     app:{fontFamily:"system-ui,sans-serif",maxWidth:420,margin:"0 auto",background:"var(--color-background-tertiary)",height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden"},
     hdr:{background:"#185FA5",color:"#fff",padding:"14px 16px 10px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0},
     body:{flex:1,padding:"12px 12px 12px",overflowY:"auto"},
     nav:{display:"flex",background:"var(--color-background-primary)",borderTop:"0.5px solid var(--color-border-tertiary)",flexShrink:0},
-    nb:(a)=>({flex:1,display:"flex",flexDirection:"column",alignItems:"center",padding:"8px 2px 6px",border:"none",background:"none",cursor:"pointer",color:a?"#185FA5":"var(--color-text-secondary)",fontSize:9,gap:2,borderTop:a?"2px solid #185FA5":"2px solid transparent"}),
+    nb:(a: boolean)=>({flex:1,display:"flex",flexDirection:"column",alignItems:"center",padding:"8px 2px 6px",border:"none",background:"none",cursor:"pointer",color:a?"#185FA5":"var(--color-text-secondary)",fontSize:9,gap:2,borderTop:a?"2px solid #185FA5":"2px solid transparent"}),
     card:{background:"var(--color-background-primary)",borderRadius:12,border:"0.5px solid var(--color-border-tertiary)",padding:"12px 14px",marginBottom:10},
-    bdg:(c,bg)=>({display:"inline-block",padding:"2px 7px",borderRadius:6,fontSize:11,background:bg||c+"22",color:c,fontWeight:500}),
-    btn:(c)=>({padding:"8px 14px",borderRadius:8,border:"none",background:c||"#185FA5",color:"#fff",cursor:"pointer",fontSize:13,fontWeight:500}),
+    bdg:(c: string,bg?: string)=>({display:"inline-block",padding:"2px 7px",borderRadius:6,fontSize:11,background:bg||c+"22",color:c,fontWeight:500}),
+    btn:(c?: string)=>({padding:"8px 14px",borderRadius:8,border:"none",background:c||"#185FA5",color:"#fff",cursor:"pointer",fontSize:13,fontWeight:500}),
     out:{padding:"6px 12px",borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"none",color:"var(--color-text-primary)",cursor:"pointer",fontSize:13},
     inp:{width:"100%",padding:"8px 10px",borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-secondary)",color:"var(--color-text-primary)",fontSize:13,boxSizing:"border-box"},
     lbl:{fontSize:12,color:"var(--color-text-secondary)",marginBottom:3,display:"block"},
@@ -192,6 +163,14 @@ export default function App(){
     sht:{background:"var(--color-background-primary)",borderRadius:"16px 16px 0 0",padding:20,width:"100%",maxWidth:420,maxHeight:"84vh",overflowY:"auto"},
     ful:{position:"fixed",inset:0,background:"#fff",zIndex:200,display:"flex",flexDirection:"column",maxWidth:420,margin:"0 auto",overflow:"hidden"},
   };
+
+  // ── LOADING ───────────────────────────────────────────────────────────────
+  if(loading) return(
+    <div style={{...s.app,justifyContent:"center",alignItems:"center"}}>
+      <div style={{fontSize:40,marginBottom:12}}>🏥</div>
+      <div style={{fontSize:14,color:"var(--color-text-secondary)"}}>Carregando...</div>
+    </div>
+  );
 
   // ── LOGIN ─────────────────────────────────────────────────────────────────
   if(!user) return(
@@ -237,15 +216,15 @@ export default function App(){
     ...(isAdmin?[{id:"config",icon:"⚙️",label:"Config"}]:[]),
   ];
 
-  const myNotifs=notifs.filter(n=>isAdmin||n.membId===myId||n.membId===null);
+  const myNotifs=notifs.filter((n:any)=>isAdmin||n.membId===myId||n.membId===null);
 
   // ── SHIFT CARD ────────────────────────────────────────────────────────────
-  function ShiftCard({sh}){
+  function ShiftCard({sh}: any){
     const t=stOf(sh.tipo); const sub=sh.substitutoId?mById(sh.substitutoId):null;
     const [er,setEr]=useState(false); const [es,setEs]=useState(false);
     const [sr,setSr]=useState(sh.membroId);
-    const [ss2,setSs2]=useState(members.find(m=>m.id!==sh.membroId)?.id||1);
-    const sorted=[...members].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
+    const [ss2,setSs2]=useState(members.find((m:any)=>m.id!==sh.membroId)?.id||1);
+    const sorted=[...members].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
     return(
       <div style={{...s.card,borderLeft:`3px solid ${t.color}`}}>
         <div style={{...s.row,justifyContent:"space-between",marginBottom:3}}>
@@ -255,7 +234,7 @@ export default function App(){
         <div style={{fontSize:13,fontWeight:500}}>{sh.inicio}–{sh.fim}</div>
         <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:2}}>
           <b style={{color:"var(--color-text-primary)"}}>Resp.:</b> {mName(sh.membroId)}
-          {sub&&<span style={{color:t.color}}> · Sub.: {sub.nome}</span>}
+          {sub&&<span style={{color:t.color}}> · Sub.: {(sub as any).nome}</span>}
         </div>
         <div style={s.sep}/>
         {isAdmin&&<div style={{marginBottom:8}}>
@@ -265,7 +244,7 @@ export default function App(){
           </div>
           {er&&<div style={{...s.row,gap:6}}>
             <select style={{...s.inp,flex:1}} value={sr} onChange={e=>setSr(Number(e.target.value))}>
-              {sorted.map(m=><option key={m.id} value={m.id}>{m.nome}</option>)}
+              {sorted.map((m:any)=><option key={m.id} value={m.id}>{m.nome}</option>)}
             </select>
             <button style={s.btn()} onClick={()=>{changeResp(sh.id,sr);setEr(false);}}>OK</button>
           </div>}
@@ -278,7 +257,7 @@ export default function App(){
           </div>
           {es&&!sub&&<div style={{...s.row,gap:6}}>
             <select style={{...s.inp,flex:1}} value={ss2} onChange={e=>setSs2(Number(e.target.value))}>
-              {sorted.filter(m=>m.id!==sh.membroId).map(m=><option key={m.id} value={m.id}>{m.nome}</option>)}
+              {sorted.filter((m:any)=>m.id!==sh.membroId).map((m:any)=><option key={m.id} value={m.id}>{m.nome}</option>)}
             </select>
             <button style={s.btn()} onClick={()=>{setSub(sh.id,ss2);setEs(false);}}>OK</button>
           </div>}
@@ -334,12 +313,11 @@ export default function App(){
         {todayS.map(sh=>{
           const t=stOf(sh.tipo); const sub=sh.substitutoId?mById(sh.substitutoId):null;
           return(
-            <div key={sh.id}
-              style={{...s.card,borderLeft:`3px solid ${t.color}`,display:"flex",alignItems:"center",gap:10}}>
+            <div key={sh.id} style={{...s.card,borderLeft:`3px solid ${t.color}`,display:"flex",alignItems:"center",gap:10}}>
               <div style={{flex:1,cursor:"pointer"}} onClick={()=>setModal({type:"editShift",shiftId:sh.id})}>
                 <div style={{...s.row,gap:6,marginBottom:3}}><span style={s.bdg(t.color,t.bg)}>{t.label}</span><span style={{fontSize:12,color:"var(--color-text-secondary)"}}>{sh.inicio}–{sh.fim}</span></div>
                 <div style={{fontSize:13,fontWeight:500}}>{mName(sh.membroId)}</div>
-                {sub&&<div style={{fontSize:12,color:t.color}}>Sub.: {sub.nome}</div>}
+                {sub&&<div style={{fontSize:12,color:t.color}}>Sub.: {(sub as any).nome}</div>}
               </div>
               {isAdmin
                 ? <button style={{...s.out,color:"#A32D2D",fontSize:13,padding:"6px 10px",flexShrink:0}} onClick={e=>{e.stopPropagation();delShift(sh.id);}}>✕</button>
@@ -373,24 +351,20 @@ export default function App(){
 
   // ── PAGAMENTO ─────────────────────────────────────────────────────────────
   function PagamentoView(){
-    const [selMem,setSelMem]=useState(isAdmin?members[0].id:myId);
+    const [selMem,setSelMem]=useState(isAdmin?members[0]?.id:myId);
     const [pM,setPM]=useState(calM); const [pY,setPY]=useState(calY);
     const m=mById(selMem);
     const{bruto,liquido,list}=m?calcMes(selMem,pY,pM):{bruto:0,liquido:0,list:[]};
-    const byTipo={};
-    list.forEach(sh=>{
-      if(!byTipo[sh.tipo]) byTipo[sh.tipo]={count:0,bruto:0,liquido:0};
-      const tar=tarifas[sh.tipo]||{bruto:0,liquido:0};
-      byTipo[sh.tipo].count++; byTipo[sh.tipo].bruto+=tar.bruto; byTipo[sh.tipo].liquido+=tar.liquido;
-    });
-    const sorted=[...members].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
+    const byTipo: any={};
+    list.forEach(sh=>{ if(!byTipo[sh.tipo]) byTipo[sh.tipo]={count:0,bruto:0,liquido:0}; const tar=(tarifas as any)[sh.tipo]||{bruto:0,liquido:0}; byTipo[sh.tipo].count++; byTipo[sh.tipo].bruto+=tar.bruto; byTipo[sh.tipo].liquido+=tar.liquido; });
+    const sorted=[...members].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
     const myRep=savedReports.filter(r=>isAdmin||r.membId===myId);
     return(
       <div>
         {isAdmin&&<div style={{marginBottom:10}}>
           <label style={s.lbl}>Médico</label>
           <select style={s.inp} value={selMem} onChange={e=>setSelMem(Number(e.target.value))}>
-            {sorted.map(m=><option key={m.id} value={m.id}>{m.nome}</option>)}
+            {sorted.map((m:any)=><option key={m.id} value={m.id}>{m.nome}</option>)}
           </select>
         </div>}
         <div style={{...s.row,justifyContent:"space-between",marginBottom:12}}>
@@ -406,7 +380,7 @@ export default function App(){
             <div><div style={s.lbl}>Total Líquido</div><div style={{fontWeight:500,fontSize:16,color:"#0F6E56"}}>R$ {liquido.toLocaleString("pt-BR")}</div></div>
           </div>
         </div>
-        {Object.entries(byTipo).map(([tid,v])=>{const t=stOf(tid);return(
+        {Object.entries(byTipo).map(([tid,v]: any)=>{const t=stOf(tid);return(
           <div key={tid} style={{...s.card,borderLeft:`3px solid ${t.color}`,padding:"10px 12px",marginBottom:8}}>
             <div style={{...s.row,justifyContent:"space-between",marginBottom:4}}><span style={s.bdg(t.color,t.bg)}>{t.label}</span><span style={{fontSize:12,color:"var(--color-text-secondary)"}}>{v.count}×</span></div>
             <div style={{...s.row,gap:12}}>
@@ -415,19 +389,15 @@ export default function App(){
             </div>
           </div>
         );})}
-        <button style={{...s.btn(),width:"100%",marginTop:4}} onClick={()=>gerarRelatorio(selMem,pY,pM,isAdmin)}>
-          📄 Gerar relatório individual
-        </button>
-        {isAdmin&&<button style={{...s.btn("#0F6E56"),width:"100%",marginTop:8}} onClick={()=>gerarRelatorioEquipe(pY,pM)}>
-          📋 Gerar relatório da equipe
-        </button>}
+        <button style={{...s.btn(),width:"100%",marginTop:4}} onClick={()=>gerarRelatorio(selMem,pY,pM,isAdmin)}>📄 Gerar relatório individual</button>
+        {isAdmin&&<button style={{...s.btn("#0F6E56"),width:"100%",marginTop:8}} onClick={()=>gerarRelatorioEquipe(pY,pM)}>📋 Gerar relatório da equipe</button>}
         {myRep.length>0&&<>
           <div style={{fontWeight:500,fontSize:14,margin:"16px 0 8px"}}>Relatórios salvos</div>
           {myRep.map(r=>(
             <div key={r.id} style={{...s.card,padding:"10px 12px",display:"flex",alignItems:"center",gap:8}}>
               <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500}}>{r.title}</div><div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{r.date}</div></div>
               <button style={s.btn()} onClick={()=>openHTML(r.html)}>📥 Ver</button>
-              <button style={{...s.out,color:"#A32D2D",fontSize:12,padding:"5px 8px"}} onClick={()=>setSavedReports(p=>p.filter(x=>x.id!==r.id))}>✕</button>
+              <button style={{...s.out,color:"#A32D2D",fontSize:12,padding:"5px 8px"}} onClick={()=>setSavedReports(p=>p.filter((x:any)=>x.id!==r.id))}>✕</button>
             </div>
           ))}
         </>}
@@ -437,17 +407,17 @@ export default function App(){
 
   // ── RELATÓRIO ─────────────────────────────────────────────────────────────
   function RelatorioView(){
-    const [selMem,setSelMem]=useState(isAdmin?members[0].id:myId);
+    const [selMem,setSelMem]=useState(isAdmin?members[0]?.id:myId);
     const [rM,setRM]=useState(calM); const [rY,setRY]=useState(calY);
     const m=mById(selMem);
     const{bruto,liquido,list}=m?calcMes(selMem,rY,rM):{bruto:0,liquido:0,list:[]};
-    const sorted=[...members].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
+    const sorted=[...members].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
     const myRep=savedReports.filter(r=>isAdmin||r.membId===myId);
     return(
       <div>
         {isAdmin&&<><div style={s.lbl}>Médico</div>
           <select value={selMem} onChange={e=>setSelMem(Number(e.target.value))} style={{...s.inp,marginBottom:10}}>
-            {sorted.map(m=><option key={m.id} value={m.id}>{m.nome}</option>)}
+            {sorted.map((m:any)=><option key={m.id} value={m.id}>{m.nome}</option>)}
           </select>
         </>}
         <div style={{...s.row,justifyContent:"space-between",marginBottom:12}}>
@@ -460,25 +430,12 @@ export default function App(){
             <div style={{fontWeight:500,fontSize:15,marginBottom:2}}>{m.nome}</div>
             <div style={{fontSize:12,color:"#185FA5",marginBottom:8}}>CRM-SP: {m.crmsp||"—"} · {m.esp}</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-              {(()=>{
-                const res=[{l:"Plantões",v:String(list.length),s2:"realizados"}];
-                if(isAdmin) res.push({l:"Bruto",v:"R$ "+bruto.toLocaleString("pt-BR"),s2:MONTHS[rM]});
-                res.push({l:"Líquido",v:"R$ "+liquido.toLocaleString("pt-BR"),s2:MONTHS[rM]});
-                return res.map(({l,v,s2})=>(
-                  <div key={l} style={{background:"#fff",borderRadius:8,padding:"8px 10px"}}>
-                    <div style={{fontSize:10,color:"#185FA5"}}>{l}</div>
-                    <div style={{fontWeight:500,fontSize:14,color:"#185FA5"}}>{v}</div>
-                    <div style={{fontSize:10,color:"#185FA5",opacity:0.7}}>{s2}</div>
-                  </div>
-                ));
-              })()}
+              {(()=>{ const res: any[]=[{l:"Plantões",v:String(list.length),s2:"realizados"}]; if(isAdmin) res.push({l:"Bruto",v:"R$ "+bruto.toLocaleString("pt-BR"),s2:MONTHS[rM]}); res.push({l:"Líquido",v:"R$ "+liquido.toLocaleString("pt-BR"),s2:MONTHS[rM]}); return res.map(({l,v,s2})=>(<div key={l} style={{background:"#fff",borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:10,color:"#185FA5"}}>{l}</div><div style={{fontWeight:500,fontSize:14,color:"#185FA5"}}>{v}</div><div style={{fontSize:10,color:"#185FA5",opacity:0.7}}>{s2}</div></div>)); })()}
             </div>
-            <button style={{...s.btn("#fff"),color:"#185FA5",width:"100%",border:"0.5px solid #185FA5"}} onClick={()=>gerarRelatorio(selMem,rY,rM,isAdmin)}>
-              📄 Exportar e abrir relatório
-            </button>
+            <button style={{...s.btn("#fff"),color:"#185FA5",width:"100%",border:"0.5px solid #185FA5"}} onClick={()=>gerarRelatorio(selMem,rY,rM,isAdmin)}>📄 Exportar e abrir relatório</button>
           </div>
           <div style={{fontWeight:500,fontSize:14,margin:"12px 0 8px"}}>Plantões — {list.length}</div>
-          {list.map(sh=>{const t=stOf(sh.tipo); const tar=tarifas[sh.tipo]||{bruto:0,liquido:0}; return(
+          {list.map(sh=>{const t=stOf(sh.tipo); const tar=(tarifas as any)[sh.tipo]||{bruto:0,liquido:0}; return(
             <div key={sh.id} style={{...s.card,padding:"10px 12px",borderLeft:`3px solid ${t.color}`}}>
               <div style={{...s.row,justifyContent:"space-between"}}><span style={{fontSize:13,fontWeight:500}}>{new Date(sh.data+"T12:00").toLocaleDateString("pt-BR",{weekday:"short",day:"2-digit",month:"short"})}</span><span style={s.bdg(t.color,t.bg)}>{t.label}</span></div>
               <div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{sh.inicio}–{sh.fim}</div>
@@ -494,7 +451,7 @@ export default function App(){
               <div key={r.id} style={{...s.card,padding:"10px 12px",display:"flex",alignItems:"center",gap:8}}>
                 <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500}}>{r.title}</div><div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{r.date}</div></div>
                 <button style={s.btn()} onClick={()=>openHTML(r.html)}>📥 Ver</button>
-                <button style={{...s.out,color:"#A32D2D",fontSize:12,padding:"5px 8px"}} onClick={()=>setSavedReports(p=>p.filter(x=>x.id!==r.id))}>✕</button>
+                <button style={{...s.out,color:"#A32D2D",fontSize:12,padding:"5px 8px"}} onClick={()=>setSavedReports(p=>p.filter((x:any)=>x.id!==r.id))}>✕</button>
               </div>
             ))}
           </>}
@@ -507,11 +464,13 @@ export default function App(){
   function EquipeView(){
     const [showForm,setShowForm]=useState(false);
     const [nm,setNm]=useState({nome:"",crmsp:"",esp:"",tel:"",email:""});
-    const sorted=[...members].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
-    function addM(){
+    const sorted=[...members].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
+    async function addM(){
       if(!nm.nome||!nm.crmsp) return;
       const pw=initSenha(nm.nome);
-      setMembers(p=>[...p,{...nm,id:uid(),senha:pw,role:"medico",ativo:true,periodicidades:{}}]);
+      const newM={...nm,senha:pw,role:"medico",ativo:true,periodicidades:{}};
+      const {data}=await supabase.from("members").insert(newM).select().single();
+      if(data) setMembers(p=>[...p,data]);
       setNm({nome:"",crmsp:"",esp:"",tel:"",email:""}); setShowForm(false);
       addNotif(`Médico ${nm.nome} cadastrado. Senha inicial: ${pw}`,null);
     }
@@ -524,17 +483,17 @@ export default function App(){
           <div style={{fontWeight:500,marginBottom:10}}>Novo médico</div>
           {[["nome","Nome completo","text"],["crmsp","Nº CRM-SP (login)","text"],["esp","Especialidade","text"],["tel","Telefone","tel"],["email","E-mail","email"]].map(([k,pl,tp])=>(
             <div key={k} style={{marginBottom:8}}><label style={s.lbl}>{pl}</label>
-              <input style={s.inp} placeholder={pl} value={nm[k]||""} onChange={e=>setNm(p=>({...p,[k]:e.target.value}))} type={tp}/>
+              <input style={s.inp} placeholder={pl} value={(nm as any)[k]||""} onChange={e=>setNm(p=>({...p,[k]:e.target.value}))} type={tp}/>
             </div>
           ))}
-          <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:10}}>Senha gerada automaticamente: 3 iniciais + 123</div>
+          <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:10}}>Senha gerada automaticamente: iniciais + 123</div>
           <button style={{...s.btn(),width:"100%"}} onClick={addM}>Salvar médico</button>
         </div>}
-        {sorted.map(m=>(
+        {sorted.map((m:any)=>(
           <div key={m.id} style={{...s.card,cursor:"pointer",opacity:m.ativo?1:0.5}} onClick={()=>setModal({type:"perfil",membId:m.id})}>
             <div style={{...s.row,gap:10}}>
               <div style={{width:40,height:40,borderRadius:"50%",background:m.ativo?"#E6F1FB":"#eee",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:500,color:"#185FA5",flexShrink:0}}>
-                {m.nome.split(" ").map(x=>x[0]).slice(0,2).join("")}
+                {m.nome.split(" ").map((x:string)=>x[0]).slice(0,2).join("")}
               </div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{...s.row,gap:6}}><span style={{fontWeight:500,fontSize:14}}>{m.nome}</span>{!m.ativo&&<span style={{...s.bdg("#A32D2D"),fontSize:10}}>Bloqueado</span>}</div>
@@ -551,21 +510,17 @@ export default function App(){
 
   // ── CONFIG ────────────────────────────────────────────────────────────────
   function ConfigView(){
-    const [editId,setEditId]=useState(null);
+    const [editId,setEditId]=useState<string|null>(null);
     const [ef,setEf]=useState({label:"",bruto:0,liquido:0});
     const [sa,setSa]=useState(""); const [sn,setSn]=useState(""); const [sc,setSc]=useState(""); const [sm,setSm]=useState("");
-    function startEdit(t){setEditId(t.id);setEf({label:t.label,bruto:tarifas[t.id]?.bruto||0,liquido:tarifas[t.id]?.liquido||0});}
-    function saveEdit(tid){
-      setStypes(p=>p.map(x=>x.id===tid?{...x,label:ef.label}:x));
-      setTarifas(p=>({...p,[tid]:{bruto:Number(ef.bruto),liquido:Number(ef.liquido)}}));
-      setEditId(null);
-    }
-    function trocarSenha(){
-      const m=mById(myId);
-      if(!m||m.senha!==sa){setSm("Senha atual incorreta.");return;}
+    function startEdit(t: any){setEditId(t.id);setEf({label:t.label,bruto:(tarifas as any)[t.id]?.bruto||0,liquido:(tarifas as any)[t.id]?.liquido||0});}
+    function saveEdit(tid: string){ setStypes(p=>p.map(x=>x.id===tid?{...x,label:ef.label}:x)); setTarifas(p=>({...p,[tid]:{bruto:Number(ef.bruto),liquido:Number(ef.liquido)}})); setEditId(null); }
+    async function trocarSenha(){
+      const m=mById(myId); if(!m||m.senha!==sa){setSm("Senha atual incorreta.");return;}
       if(sn.length<6){setSm("Nova senha deve ter ao menos 6 caracteres.");return;}
       if(sn!==sc){setSm("As senhas não coincidem.");return;}
-      setMembers(p=>p.map(x=>x.id===myId?{...x,senha:sn}:x));
+      await supabase.from("members").update({senha:sn}).eq("id",myId);
+      setMembers(p=>p.map((x:any)=>x.id===myId?{...x,senha:sn}:x));
       setSm("Senha alterada com sucesso!"); setSa(""); setSn(""); setSc("");
     }
     return(
@@ -578,13 +533,10 @@ export default function App(){
                 <div>
                   <div style={{marginBottom:8}}><label style={s.lbl}>Nome</label><input style={s.inp} value={ef.label} onChange={e=>setEf(p=>({...p,label:e.target.value}))}/></div>
                   <div style={{...s.row,gap:8,marginBottom:10}}>
-                    <div style={{flex:1}}><label style={s.lbl}>Bruto (R$)</label><input type="number" style={s.inp} value={ef.bruto} onChange={e=>setEf(p=>({...p,bruto:e.target.value}))}/></div>
-                    <div style={{flex:1}}><label style={s.lbl}>Líquido (R$)</label><input type="number" style={s.inp} value={ef.liquido} onChange={e=>setEf(p=>({...p,liquido:e.target.value}))}/></div>
+                    <div style={{flex:1}}><label style={s.lbl}>Bruto (R$)</label><input type="number" style={s.inp} value={ef.bruto} onChange={e=>setEf(p=>({...p,bruto:Number(e.target.value)}))}/></div>
+                    <div style={{flex:1}}><label style={s.lbl}>Líquido (R$)</label><input type="number" style={s.inp} value={ef.liquido} onChange={e=>setEf(p=>({...p,liquido:Number(e.target.value)}))}/></div>
                   </div>
-                  <div style={{...s.row,gap:6}}>
-                    <button style={{...s.out,flex:1}} onClick={()=>setEditId(null)}>Cancelar</button>
-                    <button style={{...s.btn(),flex:1}} onClick={()=>saveEdit(t.id)}>Salvar</button>
-                  </div>
+                  <div style={{...s.row,gap:6}}><button style={{...s.out,flex:1}} onClick={()=>setEditId(null)}>Cancelar</button><button style={{...s.btn(),flex:1}} onClick={()=>saveEdit(t.id)}>Salvar</button></div>
                 </div>
               ):(
                 <div>
@@ -593,8 +545,8 @@ export default function App(){
                     <button style={{...s.out,fontSize:12,padding:"4px 10px"}} onClick={()=>startEdit(t)}>Editar</button>
                   </div>
                   <div style={{...s.row,gap:16}}>
-                    <div><div style={s.lbl}>Bruto</div><div style={{fontWeight:500,color:"#185FA5"}}>R$ {(tarifas[t.id]?.bruto||0).toLocaleString("pt-BR")}</div></div>
-                    <div><div style={s.lbl}>Líquido</div><div style={{fontWeight:500,color:"#0F6E56"}}>R$ {(tarifas[t.id]?.liquido||0).toLocaleString("pt-BR")}</div></div>
+                    <div><div style={s.lbl}>Bruto</div><div style={{fontWeight:500,color:"#185FA5"}}>R$ {((tarifas as any)[t.id]?.bruto||0).toLocaleString("pt-BR")}</div></div>
+                    <div><div style={s.lbl}>Líquido</div><div style={{fontWeight:500,color:"#0F6E56"}}>R$ {((tarifas as any)[t.id]?.liquido||0).toLocaleString("pt-BR")}</div></div>
                   </div>
                 </div>
               )}
@@ -603,7 +555,7 @@ export default function App(){
           <div style={s.sep}/>
         </>}
         <div style={{fontWeight:500,fontSize:15,margin:"12px 0 8px"}}>Alterar minha senha</div>
-        {[["Senha atual",sa,setSa],["Nova senha",sn,setSn],["Confirmar",sc,setSc]].map(([pl,val,set])=>(
+        {[["Senha atual",sa,setSa],["Nova senha",sn,setSn],["Confirmar",sc,setSc]].map(([pl,val,set]: any)=>(
           <div key={pl} style={{marginBottom:8}}><label style={s.lbl}>{pl}</label>
             <input type="password" style={s.inp} placeholder="••••••••" value={val} onChange={e=>set(e.target.value)}/>
           </div>
@@ -615,14 +567,14 @@ export default function App(){
   }
 
   // ── MODALS ────────────────────────────────────────────────────────────────
-  function EditShiftModal({shiftId}){
+  function EditShiftModal({shiftId}: any){
     const sh=shifts.find(s=>s.id===shiftId); if(!sh) return null;
     const t=stOf(sh.tipo); const sub=sh.substitutoId?mById(sh.substitutoId):null;
     const [sr,setSr]=useState(sh.membroId);
-    const sorted=[...members].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
+    const sorted=[...members].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
     return(
       <div style={s.ovl} onClick={()=>setModal(null)}>
-        <div style={s.sht} onClick={e=>e.stopPropagation()}>
+        <div style={s.sht} onClick={(e:any)=>e.stopPropagation()}>
           <div style={{...s.row,justifyContent:"space-between",marginBottom:14}}>
             <span style={{fontWeight:500,fontSize:16}}>Detalhes do plantão</span>
             <button style={s.out} onClick={()=>setModal(null)}>✕</button>
@@ -637,7 +589,7 @@ export default function App(){
           </div>
           <label style={s.lbl}>Responsável</label>
           <select style={{...s.inp,marginBottom:8}} value={sr} onChange={e=>setSr(Number(e.target.value))}>
-            {sorted.map(m=><option key={m.id} value={m.id}>{m.nome}</option>)}
+            {sorted.map((m:any)=><option key={m.id} value={m.id}>{m.nome}</option>)}
           </select>
           {sr!==sh.membroId&&<div style={{...s.row,gap:6,marginBottom:10}}>
             {isAdmin&&<button style={{...s.btn(),flex:1,fontSize:12}} onClick={()=>{changeResp(sh.id,sr);setModal(null);}}>Salvar definitivo</button>}
@@ -646,7 +598,7 @@ export default function App(){
           {sub&&<div style={{...s.card,background:t.bg,border:"none",marginBottom:10,padding:"10px 12px"}}>
             <div style={{fontSize:12,color:t.color,marginBottom:2}}>Substituto registrado</div>
             <div style={{...s.row,justifyContent:"space-between"}}>
-              <span style={{fontWeight:500,color:t.color}}>{sub.nome}</span>
+              <span style={{fontWeight:500,color:t.color}}>{(sub as any).nome}</span>
               <button style={{...s.out,fontSize:11,padding:"3px 8px",color:"#A32D2D"}} onClick={()=>{cancelSub(sh.id);setModal(null);}}>Cancelar</button>
             </div>
           </div>}
@@ -668,30 +620,46 @@ export default function App(){
     );
   }
 
-  function PerfilModal({membId}){
+  function PerfilModal({membId}: any){
     const m=mById(membId); if(!m) return null;
     const [edit,setEdit]=useState(false); const [form,setForm]=useState({...m});
     const periOpts=[{v:1,l:"Toda semana"},{v:2,l:"A cada 2 sem."},{v:3,l:"A cada 3 sem."},{v:4,l:"A cada 4 sem."}];
     const meusTipos=[...new Set(shifts.filter(s=>s.membroId===membId).map(s=>s.tipo))];
-    function save(){setMembers(p=>p.map(x=>x.id===membId?{...x,...form}:x));setEdit(false);}
-    function toggleBlock(){setMembers(p=>p.map(x=>x.id===membId?{...x,ativo:!x.ativo}:x));}
-    function del(){if(window.confirm(`Excluir ${m.nome}?`)){setMembers(p=>p.filter(x=>x.id!==membId));setModal(null);}}
-    function applyPeri(tipoId,sem){
-      setMembers(p=>p.map(x=>x.id===membId?{...x,periodicidades:{...(x.periodicidades||{}),[tipoId]:sem}}:x));
-      const hoje=new Date("2026-05-19T12:00:00");
-      setShifts(prev=>{
-        const filt=prev.filter(s=>!(s.membroId===membId&&s.tipo===tipoId&&s.status==="agendado"&&new Date(s.data+"T12:00")>=hoje));
-        const base=prev.find(s=>s.membroId===membId&&s.tipo===tipoId); if(!base) return filt;
-        const novas=[]; const dow=new Date(base.data+"T12:00").getDay();
+    async function save(){
+      await supabase.from("members").update(form).eq("id",membId);
+      setMembers(p=>p.map((x:any)=>x.id===membId?{...x,...form}:x)); setEdit(false);
+    }
+    async function toggleBlock(){
+      const newAtivo=!m.ativo;
+      await supabase.from("members").update({ativo:newAtivo}).eq("id",membId);
+      setMembers(p=>p.map((x:any)=>x.id===membId?{...x,ativo:newAtivo}:x));
+    }
+    async function del(){
+      if(window.confirm(`Excluir ${m.nome}?`)){
+        await supabase.from("members").delete().eq("id",membId);
+        setMembers(p=>p.filter((x:any)=>x.id!==membId)); setModal(null);
+      }
+    }
+    async function applyPeri(tipoId: string,sem: number){
+      const newPeri={...(m.periodicidades||{}),[tipoId]:sem};
+      await supabase.from("members").update({periodicidades:newPeri}).eq("id",membId);
+      setMembers(p=>p.map((x:any)=>x.id===membId?{...x,periodicidades:newPeri}:x));
+      const hoje=new Date(); hoje.setHours(12,0,0,0);
+      const toDelete=shifts.filter(s=>s.membroId===membId&&s.tipo===tipoId&&s.status==="agendado"&&new Date(s.data+"T12:00")>=hoje);
+      if(toDelete.length) await supabase.from("shifts").delete().in("id",toDelete.map(s=>s.id));
+      const base=shifts.find(s=>s.membroId===membId&&s.tipo===tipoId);
+      if(base){
+        const novas: any[]=[]; const dow=new Date(base.data+"T12:00").getDay();
         const d0=new Date(hoje); while(d0.getDay()!==dow) d0.setDate(d0.getDate()+1);
-        let d=new Date(d0); const fim=new Date("2027-05-19");
-        while(d<=fim){novas.push({id:uid(),membroId:membId,data:d.toISOString().slice(0,10),inicio:base.inicio,fim:base.fim,tipo:tipoId,status:"agendado",checkIn:null,checkOut:null,substitutoId:null});d=new Date(d);d.setDate(d.getDate()+sem*7);}
-        return[...filt,...novas];
-      });
+        let d=new Date(d0); const fim=new Date(); fim.setFullYear(fim.getFullYear()+1);
+        while(d<=fim){ novas.push({membro_id:membId,data:d.toISOString().slice(0,10),inicio:base.inicio,fim:base.fim,tipo:tipoId,status:"agendado",check_in:null,check_out:null,substituto_id:null}); d=new Date(d); d.setDate(d.getDate()+sem*7); }
+        const {data}=await supabase.from("shifts").insert(novas).select();
+        setShifts(prev=>{ const filt=prev.filter(s=>!(s.membroId===membId&&s.tipo===tipoId&&s.status==="agendado"&&new Date(s.data+"T12:00")>=hoje)); return [...filt,...(data||[]).map(dbToShift)]; });
+      }
       addNotif(`Periodicidade de ${m.nome} em ${stOf(tipoId).label}: a cada ${sem} sem.`,null);
     }
     const fields=[["nome","Nome completo","text"],["crmsp","CRM-SP (login)","text"],["esp","Especialidade","text"],["tel","Telefone","tel"],["email","E-mail","email"],["senha","Senha","password"]];
-    const initials=m.nome.split(" ").map(x=>x[0]).slice(0,2).join("");
+    const initials=m.nome.split(" ").map((x:string)=>x[0]).slice(0,2).join("");
     return(
       <div style={s.ful}>
         <div style={{background:"#185FA5",color:"#fff",padding:"14px 16px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
@@ -708,22 +676,12 @@ export default function App(){
           {!edit?(
             <>
               {[["CRM-SP",m.crmsp||"—"],["Especialidade",m.esp],["Telefone",m.tel||"—"],["E-mail",m.email||"—"],...(isAdmin?[["Senha",m.senha]]:[])]
-                .map(([l,v])=>(
-                  <div key={l} style={{...s.row,justifyContent:"space-between",padding:"10px 0",borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
-                    <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>{l}</span>
-                    <span style={{fontSize:13,fontWeight:500,maxWidth:220,textAlign:"right",wordBreak:"break-all"}}>{v}</span>
-                  </div>
-                ))}
+                .map(([l,v])=>(<div key={l} style={{...s.row,justifyContent:"space-between",padding:"10px 0",borderBottom:"0.5px solid var(--color-border-tertiary)"}}><span style={{fontSize:13,color:"var(--color-text-secondary)"}}>{l}</span><span style={{fontSize:13,fontWeight:500,maxWidth:220,textAlign:"right",wordBreak:"break-all"}}>{v}</span></div>))}
               {isAdmin&&<button style={{...s.btn(),width:"100%",marginTop:14}} onClick={()=>setEdit(true)}>Editar dados</button>}
             </>
           ):(
             <>
-              {fields.map(([k,pl,tp])=>(
-                <div key={k} style={{marginBottom:10}}>
-                  <label style={s.lbl}>{pl}</label>
-                  <input style={s.inp} type={tp} placeholder={pl} value={form[k]||""} onChange={e=>setForm(p=>({...p,[k]:e.target.value}))}/>
-                </div>
-              ))}
+              {fields.map(([k,pl,tp])=>(<div key={k} style={{marginBottom:10}}><label style={s.lbl}>{pl}</label><input style={s.inp} type={tp} placeholder={pl} value={(form as any)[k]||""} onChange={e=>setForm((p:any)=>({...p,[k]:e.target.value}))}/></div>))}
               <div style={{...s.row,gap:8,marginTop:10,marginBottom:16}}>
                 <button style={{...s.out,flex:1}} onClick={()=>setEdit(false)}>Cancelar</button>
                 <button style={{...s.btn(),flex:1}} onClick={save}>Salvar</button>
@@ -733,27 +691,14 @@ export default function App(){
           {isAdmin&&<>
             <div style={s.sep}/>
             <div style={{fontWeight:500,fontSize:14,margin:"12px 0 6px"}}>Periodicidade dos plantões</div>
-            {meusTipos.map(tipoId=>{
+            {meusTipos.map((tipoId: any)=>{
               const t=stOf(tipoId); const atual=(m.periodicidades||{})[tipoId]||1;
-              return(
-                <div key={tipoId} style={{...s.card,padding:"10px 12px",borderLeft:`3px solid ${t.color}`,marginBottom:8}}>
-                  <div style={{...s.row,gap:6,marginBottom:6}}>
-                    <span style={{width:8,height:8,borderRadius:"50%",background:t.color,display:"inline-block"}}/>
-                    <span style={{fontWeight:500,fontSize:13,color:t.color}}>{t.label}</span>
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-                    {periOpts.map(o=>(
-                      <div key={o.v} onClick={()=>applyPeri(tipoId,o.v)}
-                        style={{padding:"7px 6px",borderRadius:8,cursor:"pointer",textAlign:"center",fontSize:12,
-                          border:`1.5px solid ${atual===o.v?t.color:"var(--color-border-tertiary)"}`,
-                          background:atual===o.v?t.bg:"transparent",
-                          color:atual===o.v?t.color:"var(--color-text-primary)",fontWeight:atual===o.v?500:400}}>
-                        {o.l}
-                      </div>
-                    ))}
-                  </div>
+              return(<div key={tipoId} style={{...s.card,padding:"10px 12px",borderLeft:`3px solid ${t.color}`,marginBottom:8}}>
+                <div style={{...s.row,gap:6,marginBottom:6}}><span style={{width:8,height:8,borderRadius:"50%",background:t.color,display:"inline-block"}}/><span style={{fontWeight:500,fontSize:13,color:t.color}}>{t.label}</span></div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                  {periOpts.map(o=>(<div key={o.v} onClick={()=>applyPeri(tipoId,o.v)} style={{padding:"7px 6px",borderRadius:8,cursor:"pointer",textAlign:"center",fontSize:12,border:`1.5px solid ${atual===o.v?t.color:"var(--color-border-tertiary)"}`,background:atual===o.v?t.bg:"transparent",color:atual===o.v?t.color:"var(--color-text-primary)",fontWeight:atual===o.v?500:400}}>{o.l}</div>))}
                 </div>
-              );
+              </div>);
             })}
             <div style={s.sep}/>
             <div style={{...s.row,gap:8,marginTop:12,marginBottom:8}}>
@@ -768,15 +713,18 @@ export default function App(){
 
   function NovoPlantaoModal(){
     const [step,setStep]=useState(1);
-    const [nsh,setNsh]=useState({membroId:members[0].id,data:"2026-05-19",inicio:"07:00",fim:"19:00",freq:"Único",tipo:"plantao_ps"});
-    const sorted=[...members].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
-    function addShift(){
-      const base={...nsh,id:uid(),membroId:Number(nsh.membroId),status:"agendado",checkIn:null,checkOut:null,substitutoId:null};
-      let toAdd=[base];
-      if(nsh.freq==="Semanal") for(let i=1;i<53;i++){const d=new Date(nsh.data);d.setDate(d.getDate()+7*i);toAdd.push({...base,id:uid(),data:d.toISOString().slice(0,10)});}
-      else if(nsh.freq==="Quinzenal") for(let i=1;i<27;i++){const d=new Date(nsh.data);d.setDate(d.getDate()+14*i);toAdd.push({...base,id:uid(),data:d.toISOString().slice(0,10)});}
-      else if(nsh.freq==="Mensal") for(let i=1;i<12;i++){const d=new Date(nsh.data);d.setMonth(d.getMonth()+i);toAdd.push({...base,id:uid(),data:d.toISOString().slice(0,10)});}
-      setShifts(p=>[...p,...toAdd]); addNotif(`Plantão adicionado para ${mName(Number(nsh.membroId))}`,null); setModal(null);
+    const [nsh,setNsh]=useState({membroId:members[0]?.id||1,data:localDateStr(new Date()),inicio:"07:00",fim:"19:00",freq:"Único",tipo:"plantao_ps"});
+    const sorted=[...members].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
+    async function addShift(){
+      const base={membroId:Number(nsh.membroId),data:nsh.data,inicio:nsh.inicio,fim:nsh.fim,tipo:nsh.tipo};
+      let toAdd=[{...base}];
+      if(nsh.freq==="Semanal") for(let i=1;i<53;i++){const d=new Date(nsh.data);d.setDate(d.getDate()+7*i);toAdd.push({...base,data:d.toISOString().slice(0,10)});}
+      else if(nsh.freq==="Quinzenal") for(let i=1;i<27;i++){const d=new Date(nsh.data);d.setDate(d.getDate()+14*i);toAdd.push({...base,data:d.toISOString().slice(0,10)});}
+      else if(nsh.freq==="Mensal") for(let i=1;i<12;i++){const d=new Date(nsh.data);d.setMonth(d.getMonth()+i);toAdd.push({...base,data:d.toISOString().slice(0,10)});}
+      const toInsert=toAdd.map(s=>shiftToDb({...s,status:"agendado",checkIn:null,checkOut:null,substitutoId:null}));
+      const {data}=await supabase.from("shifts").insert(toInsert).select();
+      if(data) setShifts(p=>[...p,...data.map(dbToShift)]);
+      addNotif(`Plantão adicionado para ${mName(Number(nsh.membroId))}`,null); setModal(null);
     }
     return(
       <div style={s.ful}>
@@ -787,18 +735,11 @@ export default function App(){
         <div style={{flex:1,overflowY:"auto",padding:"20px 16px"}}>
           {step===1&&<>
             <p style={{fontSize:13,color:"var(--color-text-secondary)",marginBottom:16,marginTop:0}}>Escolha o tipo:</p>
-            {stypes.map(t=>(
-              <div key={t.id} onClick={()=>{setNsh(p=>({...p,tipo:t.id}));setStep(2);}}
-                style={{display:"flex",alignItems:"center",gap:14,padding:"16px",borderRadius:12,
-                  border:`1.5px solid ${nsh.tipo===t.id?t.color:"var(--color-border-tertiary)"}`,
-                  background:nsh.tipo===t.id?t.bg:"#fff",marginBottom:10,cursor:"pointer"}}>
-                <div style={{width:42,height:42,borderRadius:"50%",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  <span style={{width:14,height:14,borderRadius:"50%",background:t.color,display:"inline-block"}}/>
-                </div>
-                <div style={{flex:1}}><div style={{fontWeight:500,fontSize:14,color:t.color}}>{t.label}</div></div>
-                <span style={{fontSize:18,color:"var(--color-text-secondary)"}}>›</span>
-              </div>
-            ))}
+            {stypes.map(t=>(<div key={t.id} onClick={()=>{setNsh(p=>({...p,tipo:t.id}));setStep(2);}} style={{display:"flex",alignItems:"center",gap:14,padding:"16px",borderRadius:12,border:`1.5px solid ${nsh.tipo===t.id?t.color:"var(--color-border-tertiary)"}`,background:nsh.tipo===t.id?t.bg:"#fff",marginBottom:10,cursor:"pointer"}}>
+              <div style={{width:42,height:42,borderRadius:"50%",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{width:14,height:14,borderRadius:"50%",background:t.color,display:"inline-block"}}/></div>
+              <div style={{flex:1}}><div style={{fontWeight:500,fontSize:14,color:t.color}}>{t.label}</div></div>
+              <span style={{fontSize:18,color:"var(--color-text-secondary)"}}>›</span>
+            </div>))}
           </>}
           {step===2&&(()=>{
             const t=stypes.find(x=>x.id===nsh.tipo)||stypes[0];
@@ -809,28 +750,18 @@ export default function App(){
                 <button onClick={()=>setStep(1)} style={{marginLeft:"auto",fontSize:11,color:t.color,background:"none",border:`1px solid ${t.color}`,borderRadius:6,padding:"3px 8px",cursor:"pointer"}}>Trocar</button>
               </div>
               <div style={{marginBottom:10}}><label style={s.lbl}>Médico</label>
-                <select style={s.inp} value={nsh.membroId} onChange={e=>setNsh(p=>({...p,membroId:e.target.value}))}>
-                  {sorted.map(m=><option key={m.id} value={m.id}>{m.nome}</option>)}
+                <select style={s.inp} value={nsh.membroId} onChange={e=>setNsh(p=>({...p,membroId:Number(e.target.value)}))}>
+                  {sorted.map((m:any)=><option key={m.id} value={m.id}>{m.nome}</option>)}
                 </select>
               </div>
-              <div style={{marginBottom:10}}><label style={s.lbl}>Data</label>
-                <input type="date" style={s.inp} value={nsh.data} onChange={e=>setNsh(p=>({...p,data:e.target.value}))}/>
-              </div>
+              <div style={{marginBottom:10}}><label style={s.lbl}>Data</label><input type="date" style={s.inp} value={nsh.data} onChange={e=>setNsh(p=>({...p,data:e.target.value}))}/></div>
               <div style={{...s.row,gap:8,marginBottom:10}}>
                 <div style={{flex:1}}><label style={s.lbl}>Início</label><input type="time" style={s.inp} value={nsh.inicio} onChange={e=>setNsh(p=>({...p,inicio:e.target.value}))}/></div>
                 <div style={{flex:1}}><label style={s.lbl}>Fim</label><input type="time" style={s.inp} value={nsh.fim} onChange={e=>setNsh(p=>({...p,fim:e.target.value}))}/></div>
               </div>
               <div style={{marginBottom:20}}><label style={s.lbl}>Frequência</label>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:4}}>
-                  {FREQ_OPTS.map(f=>(
-                    <div key={f} onClick={()=>setNsh(p=>({...p,freq:f}))}
-                      style={{padding:"10px",borderRadius:10,cursor:"pointer",textAlign:"center",
-                        border:`1.5px solid ${nsh.freq===f?"#185FA5":"var(--color-border-tertiary)"}`,
-                        background:nsh.freq===f?"#E6F1FB":"transparent",
-                        color:nsh.freq===f?"#185FA5":"var(--color-text-primary)",fontWeight:nsh.freq===f?500:400,fontSize:13}}>
-                      {f}
-                    </div>
-                  ))}
+                  {FREQ_OPTS.map(f=>(<div key={f} onClick={()=>setNsh(p=>({...p,freq:f}))} style={{padding:"10px",borderRadius:10,cursor:"pointer",textAlign:"center",border:`1.5px solid ${nsh.freq===f?"#185FA5":"var(--color-border-tertiary)"}`,background:nsh.freq===f?"#E6F1FB":"transparent",color:nsh.freq===f?"#185FA5":"var(--color-text-primary)",fontWeight:nsh.freq===f?500:400,fontSize:13}}>{f}</div>))}
                 </div>
               </div>
               <button style={{...s.btn(),width:"100%",padding:"13px",fontSize:15}} onClick={addShift}>Salvar plantão</button>
@@ -844,21 +775,13 @@ export default function App(){
   function NotifsSheet(){
     return(
       <div style={s.ovl} onClick={()=>setShowNotifs(false)}>
-        <div style={s.sht} onClick={e=>e.stopPropagation()}>
+        <div style={s.sht} onClick={(e:any)=>e.stopPropagation()}>
           <div style={{...s.row,justifyContent:"space-between",marginBottom:14}}>
             <span style={{fontWeight:500,fontSize:16}}>Notificações</span>
             <button style={s.out} onClick={()=>{setNotifs(p=>p.map(n=>({...n,read:true})));setShowNotifs(false);}}>Marcar lidas</button>
           </div>
           {myNotifs.length===0&&<div style={{textAlign:"center",color:"var(--color-text-secondary)",padding:"20px 0",fontSize:13}}>Nenhuma notificação</div>}
-          {myNotifs.map(n=>(
-            <div key={n.id} style={{...s.card,padding:"10px 12px",borderLeft:`3px solid ${n.read?"var(--color-border-tertiary)":"#185FA5"}`,opacity:n.read?0.6:1}}>
-              <div style={{...s.row,gap:8}}>
-                <span style={{fontSize:16}}>🔔</span>
-                <span style={{fontSize:13,flex:1}}>{n.text}</span>
-                {!n.read&&<span style={{width:8,height:8,borderRadius:"50%",background:"#185FA5",flexShrink:0}}/>}
-              </div>
-            </div>
-          ))}
+          {myNotifs.map((n:any)=>(<div key={n.id} style={{...s.card,padding:"10px 12px",borderLeft:`3px solid ${n.read?"var(--color-border-tertiary)":"#185FA5"}`,opacity:n.read?0.6:1}}><div style={{...s.row,gap:8}}><span style={{fontSize:16}}>🔔</span><span style={{fontSize:13,flex:1}}>{n.text}</span>{!n.read&&<span style={{width:8,height:8,borderRadius:"50%",background:"#185FA5",flexShrink:0}}/>}</div></div>))}
         </div>
       </div>
     );
@@ -891,11 +814,7 @@ export default function App(){
         {tab==="config"   &&<ConfigView/>}
       </div>
       <nav style={s.nav}>
-        {tabs.map(t=>(
-          <button key={t.id} style={s.nb(tab===t.id)} onClick={()=>setTab(t.id)}>
-            <span style={{fontSize:18}}>{t.icon}</span><span>{t.label}</span>
-          </button>
-        ))}
+        {tabs.map(t=>(<button key={t.id} style={s.nb(tab===t.id)} onClick={()=>setTab(t.id)}><span style={{fontSize:18}}>{t.icon}</span><span>{t.label}</span></button>))}
       </nav>
       {modal?.type==="novoPlantao"&&<NovoPlantaoModal/>}
       {modal?.type==="editShift"  &&<EditShiftModal shiftId={modal.shiftId}/>}
