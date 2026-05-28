@@ -286,12 +286,6 @@ export default function App(){
         </div>
         {lErr&&<div style={{color:"#A32D2D",fontSize:12,marginBottom:10,textAlign:"center"}}>{lErr}</div>}
         <button style={{...s.btn(),width:"100%",padding:"11px"}} onClick={doLogin}>Entrar</button>
-        <div style={{marginTop:14,fontSize:11,color:"var(--color-text-secondary)",textAlign:"center",lineHeight:1.8}}>
-          Admin: <b>admin</b> / <b>admin123</b><br/>
-          Médico: login = nº CRM-SP · senha = iniciais + 123<br/>
-          Ex: Andre Dias → <b>112000</b> / <b>ad123</b><br/>
-          Ex: Amilcar Martinez → <b>100101</b> / <b>am123</b>
-        </div>
       </div>
     </div>
   );
