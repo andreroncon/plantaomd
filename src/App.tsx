@@ -28,71 +28,9 @@ function initSenha(nome){
   return nome.trim().toLowerCase().replace(/\s+/g," ").split(" ").map(p=>p[0]).join("").slice(0,3)+"123";
 }
 
-const INIT_MEMBERS = [
-  {id:1,  nome:"Amilcar Martinez",  crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Amilcar Martinez"),  role:"medico",ativo:true,periodicidades:{}},
-  {id:2,  nome:"Aline Zara",        crmsp:"",esp:"Coloproctologia", tel:"",email:"",senha:initSenha("Aline Zara"),         role:"medico",ativo:true,periodicidades:{}},
-  {id:3,  nome:"Andre Dias",        crmsp:"112000",esp:"Clínica Geral",tel:"",email:"",senha:initSenha("Andre Dias"),      role:"medico",ativo:true,periodicidades:{}},
-  {id:4,  nome:"Anne Izabelly",     crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Anne Izabelly"),      role:"medico",ativo:true,periodicidades:{}},
-  {id:5,  nome:"Antonio Marques",   crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Antonio Marques"),    role:"medico",ativo:true,periodicidades:{}},
-  {id:6,  nome:"Carolina Bonizzio", crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Carolina Bonizzio"),  role:"medico",ativo:true,periodicidades:{}},
-  {id:7,  nome:"Danilo Razente",    crmsp:"",esp:"Cirurgia",        tel:"",email:"",senha:initSenha("Danilo Razente"),      role:"medico",ativo:true,periodicidades:{}},
-  {id:8,  nome:"Elisama Paiva",     crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Elisama Paiva"),      role:"medico",ativo:true,periodicidades:{}},
-  {id:9,  nome:"Erica Sakamoto",    crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Erica Sakamoto"),     role:"medico",ativo:true,periodicidades:{}},
-  {id:10, nome:"Gabriela Teixeira", crmsp:"",esp:"Cirurgia",        tel:"",email:"",senha:initSenha("Gabriela Teixeira"),  role:"medico",ativo:true,periodicidades:{}},
-  {id:11, nome:"Joao Emilio",       crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Joao Emilio"),        role:"medico",ativo:true,periodicidades:{}},
-  {id:12, nome:"Jose Farao",        crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Jose Farao"),         role:"medico",ativo:true,periodicidades:{}},
-  {id:13, nome:"Juliana Batista",   crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Juliana Batista"),    role:"medico",ativo:true,periodicidades:{}},
-  {id:14, nome:"Luis Felipe",       crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Luis Felipe"),        role:"medico",ativo:true,periodicidades:{}},
-  {id:15, nome:"Matheus Rezende",   crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Matheus Rezende"),    role:"medico",ativo:true,periodicidades:{}},
-  {id:16, nome:"Melissa Mazepa",    crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Melissa Mazepa"),     role:"medico",ativo:true,periodicidades:{}},
-  {id:17, nome:"Munir Charruf",     crmsp:"",esp:"Cirurgia",        tel:"",email:"",senha:initSenha("Munir Charruf"),      role:"medico",ativo:true,periodicidades:{}},
-  {id:18, nome:"Pedro Marin",       crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Pedro Marin"),        role:"medico",ativo:true,periodicidades:{}},
-  {id:19, nome:"Renan Rosetti",     crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Renan Rosetti"),      role:"medico",ativo:true,periodicidades:{}},
-  {id:20, nome:"Rodrigo Nicida",    crmsp:"",esp:"Cirurgia",        tel:"",email:"",senha:initSenha("Rodrigo Nicida"),     role:"medico",ativo:true,periodicidades:{}},
-  {id:21, nome:"Sean Phillipe",     crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Sean Phillipe"),      role:"medico",ativo:true,periodicidades:{}},
-  {id:22, nome:"Sterphany",         crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Sterphany"),          role:"medico",ativo:true,periodicidades:{}},
-  {id:23, nome:"Thiago Igelssias",  crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Thiago Igelssias"),   role:"medico",ativo:true,periodicidades:{}},
-  {id:24, nome:"Wlater Amorim",     crmsp:"",esp:"Clínica Geral",   tel:"",email:"",senha:initSenha("Wlater Amorim"),      role:"medico",ativo:true,periodicidades:{}},
-];
-INIT_MEMBERS.forEach((m,i)=>{ if(!m.crmsp) m.crmsp = String(100101+i); });
+const INIT_MEMBERS: any[] = [];
 
-const MON_BASE = "2026-05-18";
-const weekTemplate = [
-  {off:1,mId:17,i:"07:00",f:"19:00",t:"plantao_ps"},{off:2,mId:22,i:"07:00",f:"19:00",t:"plantao_ps"},
-  {off:3,mId:23,i:"07:00",f:"19:00",t:"plantao_ps"},{off:4,mId:24,i:"07:00",f:"19:00",t:"plantao_ps"},
-  {off:5,mId:1, i:"07:00",f:"19:00",t:"plantao_ps"},{off:6,mId:6, i:"07:00",f:"19:00",t:"plantao_ps"},
-  {off:7,mId:4, i:"07:00",f:"19:00",t:"plantao_ps"},{off:1,mId:1, i:"07:00",f:"19:00",t:"plantao_ps"},
-  {off:6,mId:21,i:"07:00",f:"19:00",t:"plantao_ps"},{off:7,mId:5, i:"07:00",f:"19:00",t:"plantao_ps"},
-  {off:1,mId:17,i:"08:00",f:"15:00",t:"cirurgia_el"},{off:2,mId:19,i:"08:00",f:"15:00",t:"cirurgia_el"},
-  {off:4,mId:20,i:"08:00",f:"15:00",t:"cirurgia_el"},{off:5,mId:16,i:"08:00",f:"15:00",t:"cirurgia_el"},
-  {off:3,mId:9, i:"08:00",f:"15:00",t:"cirurgia_el"},
-  {off:1,mId:11,i:"08:00",f:"13:00",t:"horizontal"},{off:2,mId:10,i:"08:00",f:"13:00",t:"horizontal"},
-  {off:3,mId:7, i:"08:00",f:"13:00",t:"horizontal"},{off:4,mId:11,i:"08:00",f:"13:00",t:"horizontal"},
-  {off:5,mId:11,i:"08:00",f:"13:00",t:"horizontal"},{off:5,mId:19,i:"08:00",f:"13:00",t:"horizontal"},
-  {off:3,mId:6, i:"13:00",f:"18:00",t:"cirurgia_el"},
-  {off:1,mId:2, i:"07:00",f:"16:00",t:"coloproct"},
-  {off:1,mId:12,i:"19:00",f:"07:00",t:"ps_noite"},{off:2,mId:19,i:"19:00",f:"07:00",t:"ps_noite"},
-  {off:3,mId:20,i:"19:00",f:"07:00",t:"ps_noite"},{off:4,mId:15,i:"19:00",f:"07:00",t:"ps_noite"},
-  {off:5,mId:18,i:"19:00",f:"07:00",t:"ps_noite"},{off:6,mId:8, i:"19:00",f:"07:00",t:"ps_noite"},
-  {off:7,mId:14,i:"19:00",f:"07:00",t:"ps_noite"},
-  {off:1,mId:13,i:"19:00",f:"07:00",t:"cobertura_ps"},{off:2,mId:9, i:"19:00",f:"07:00",t:"cobertura_ps"},
-  {off:3,mId:9, i:"19:00",f:"07:00",t:"cobertura_ps"},{off:4,mId:19,i:"19:00",f:"07:00",t:"cobertura_ps"},
-  {off:5,mId:19,i:"19:00",f:"07:00",t:"cobertura_ps"},{off:6,mId:19,i:"19:00",f:"07:00",t:"cobertura_ps"},
-  {off:7,mId:19,i:"19:00",f:"07:00",t:"cobertura_ps"},
-];
-
-function generateShifts(){
-  const sh=[]; let sid=1;
-  const base=new Date(MON_BASE+"T12:00:00");
-  for(let w=0;w<53;w++){
-    weekTemplate.forEach(t=>{
-      const d=new Date(base); d.setDate(d.getDate()+w*7+t.off);
-      const ds=d.toISOString().slice(0,10);
-      if(ds>="2026-05-19") sh.push({id:sid++,membroId:t.mId,data:ds,inicio:t.i,fim:t.f,tipo:t.t,status:"agendado",checkIn:null,checkOut:null,substitutoId:null});
-    });
-  }
-  return sh;
-}
+function generateShifts(){ return []; }
 
 const stColor={ativo:"#0F6E56",agendado:"#185FA5",concluido:"#5F5E5A"};
 const stLabel={ativo:"Em plantão",agendado:"Agendado",concluido:"Concluído"};
