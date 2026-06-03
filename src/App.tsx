@@ -18,12 +18,13 @@ const DAYS   = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 const FREQ_OPTS = ["Único","Semanal","Quinzenal","Mensal"];
 
 const INIT_SHIFT_TYPES = [
-  {id:"plantao_ps",   label:"Plantão PS",      color:"#185FA5", bg:"#E6F1FB"},
-  {id:"cirurgia_el",  label:"Cirurgia Eletiva", color:"#0F6E56", bg:"#E1F5EE"},
-  {id:"horizontal",   label:"Horizontal",       color:"#BA7517", bg:"#FAEEDA"},
-  {id:"coloproct",    label:"Coloproctologia",  color:"#533AB7", bg:"#EEEDFE"},
-  {id:"ps_noite",     label:"PS Noite",         color:"#993556", bg:"#FBEAF0"},
-  {id:"cobertura_ps", label:"Cobertura PS",     color:"#A32D2D", bg:"#FCEBEB"},
+  {id:"plantao_ps",     label:"Plantão PS",        color:"#185FA5", bg:"#E6F1FB"},
+  {id:"cirurgia_el",    label:"Cirurgia Eletiva",   color:"#0F6E56", bg:"#E1F5EE"},
+  {id:"horizontal",     label:"Horizontal",         color:"#BA7517", bg:"#FAEEDA"},
+  {id:"coloproct",      label:"Coloproctologia",    color:"#533AB7", bg:"#EEEDFE"},
+  {id:"ps_noite",       label:"PS Noite",           color:"#993556", bg:"#FBEAF0"},
+  {id:"cobertura_ps",   label:"Cobertura PS",       color:"#A32D2D", bg:"#FCEBEB"},
+  {id:"acionamento_ps", label:"Acionamento PS",     color:"#C25E00", bg:"#FDF0E6"},
 ];
 
 const DEFAULT_TARIFAS = Object.fromEntries(INIT_SHIFT_TYPES.map(t=>[t.id,{bruto:1000,liquido:800}]));
@@ -119,17 +120,30 @@ export default function App(){
   }
   const cancelSub = async(sid: number)=>{ await supabase.from("shifts").update({substituto_id:null}).eq("id",sid); setShifts(p=>p.map(s=>s.id===sid?{...s,substitutoId:null}:s)); };
 
-  // Tipo efetivo para faturamento: cobertura_ps com substituto → fatura como plantao_ps
-  function tipoEfetivo(s: any){ return s.tipo==="cobertura_ps"&&s.substitutoId?"plantao_ps":s.tipo; }
+  // helpers de acionamento (armazenado em checkIn como "acionado:{id}")
+  const isAcionado  = (s: any) => typeof s.checkIn==="string"&&s.checkIn.startsWith("acionado:");
+  const acionadoId  = (s: any) => isAcionado(s)?parseInt(s.checkIn.split(":")[1]):null;
+
+  // Tipo efetivo para faturamento
+  function tipoEfetivo(s: any){
+    if(s.tipo==="cobertura_ps"){
+      if(isAcionado(s))   return "acionamento_ps";
+      if(s.substitutoId)  return "plantao_ps";
+    }
+    return s.tipo;
+  }
 
   function calcMes(membId: number,year: number,month: number){
     const m=mById(membId); if(!m) return{bruto:0,liquido:0,list:[]};
     const key=`${year}-${String(month+1).padStart(2,"0")}`;
     const done=shifts.filter(s=>{
       if(!s.data.startsWith(key)) return false;
+      if(s.tipo==="cobertura_ps"){
+        if(isAcionado(s))  return acionadoId(s)===membId;
+        return (s.substitutoId||s.membroId)===membId;
+      }
       if((s.substitutoId||s.membroId)!==membId) return false;
-      if(s.tipo==="cobertura_ps") return true; // cobertura PS não precisa de check-in/out
-      return s.checkIn!==null||s.checkOut!==null; // outros: basta check-in OU check-out
+      return s.checkIn!==null||s.checkOut!==null;
     });
     let bruto=0,liquido=0;
     done.forEach(s=>{ const tar=(tarifas as any)[tipoEfetivo(s)]||{bruto:0,liquido:0}; bruto+=tar.bruto; liquido+=tar.liquido; });
@@ -257,29 +271,57 @@ export default function App(){
             <button style={s.btn()} onClick={()=>{changeResp(sh.id,sr);setEr(false);}}>OK</button>
           </div>}
         </div>}
-        {/* Substituição */}
-        {sh.status==="agendado"&&<div style={{marginBottom:8}}>
+        {/* Substituição pontual (todos os tipos) */}
+        {sh.tipo!=="cobertura_ps"&&sh.status==="agendado"&&<div style={{marginBottom:8}}>
           <div style={{...s.row,justifyContent:"space-between",marginBottom:4}}>
-            <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>
-              {sh.tipo==="cobertura_ps"?"Substituir por Plantão PS":"Substituição pontual"}
-            </span>
+            <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>Substituição pontual</span>
             {sub?((isAdmin||myId===sh.membroId)&&<button style={{...s.out,fontSize:11,padding:"3px 8px",color:"#A32D2D"}} onClick={()=>cancelSub(sh.id)}>Cancelar sub.</button>)
                :<button style={{...s.out,fontSize:11,padding:"3px 8px"}} onClick={()=>setEs(v=>!v)}>{es?"✕":"Indicar"}</button>}
           </div>
           {es&&!sub&&<div style={{...s.row,gap:6}}>
             <select style={{...s.inp,flex:1}} value={ss2} onChange={e=>setSs2(Number(e.target.value))}>
-              {/* cobertura_ps: todos veem lista completa (inclusive o responsável)
-                  Outros plantões: admin/responsável veem todos; demais veem só a si mesmos */}
-              {(sh.tipo==="cobertura_ps"
-                ? sorted
-                : isAdmin||myId===sh.membroId
-                  ? sorted.filter((m:any)=>m.id!==sh.membroId)
-                  : sorted.filter((m:any)=>m.id===myId)
+              {(isAdmin||myId===sh.membroId
+                ? sorted.filter((m:any)=>m.id!==sh.membroId)
+                : sorted.filter((m:any)=>m.id===myId)
               ).map((m:any)=><option key={m.id} value={m.id}>{m.nome}</option>)}
             </select>
             <button style={s.btn()} onClick={()=>{setSub(sh.id,ss2);setEs(false);}}>OK</button>
           </div>}
-          {sh.tipo==="cobertura_ps"&&sub&&<div style={{fontSize:11,color:"#185FA5",marginTop:4}}>💡 Faturado como Plantão PS</div>}
+        </div>}
+
+        {/* Cobertura PS: Substituição por PS + Acionamento */}
+        {sh.tipo==="cobertura_ps"&&sh.status==="agendado"&&!isAcionado(sh)&&!sh.substitutoId&&<div style={{marginBottom:8}}>
+          {/* --- Substituição → PS --- */}
+          <div style={{...s.row,justifyContent:"space-between",marginBottom:4}}>
+            <span style={{fontSize:12,color:"#185FA5",fontWeight:500}}>Substituir por Plantão PS</span>
+            <button style={{...s.out,fontSize:11,padding:"3px 8px"}} onClick={()=>setEs(v=>!v)}>{es?"✕":"Indicar"}</button>
+          </div>
+          {es&&<div style={{...s.row,gap:6,marginBottom:8}}>
+            <select style={{...s.inp,flex:1}} value={ss2} onChange={e=>setSs2(Number(e.target.value))}>
+              {sorted.map((m:any)=><option key={m.id} value={m.id}>{m.nome}</option>)}
+            </select>
+            <button style={s.btn()} onClick={()=>{setSub(sh.id,ss2);setEs(false);}}>OK</button>
+          </div>}
+          {/* --- Acionamento --- */}
+          <div style={{...s.row,justifyContent:"space-between",marginBottom:4}}>
+            <span style={{fontSize:12,color:"#C25E00",fontWeight:500}}>Acionamento PS</span>
+            <button style={{...s.out,fontSize:11,padding:"3px 8px",color:"#C25E00"}} onClick={async()=>{
+              const id=myId||sh.membroId;
+              await supabase.from("shifts").update({check_in:"acionado:"+id}).eq("id",sh.id);
+              setShifts(p=>p.map(x=>x.id===sh.id?{...x,checkIn:"acionado:"+id}:x));
+            }}>Acionar</button>
+          </div>
+        </div>}
+        {sh.tipo==="cobertura_ps"&&sh.substitutoId&&<div style={{...s.row,justifyContent:"space-between",marginBottom:8,padding:"8px 10px",borderRadius:8,background:"#E6F1FB"}}>
+          <span style={{fontSize:12,color:"#185FA5"}}>💡 Sub. por PS: <b>{mName(sh.substitutoId)}</b></span>
+          {(isAdmin||myId===sh.membroId)&&<button style={{...s.out,fontSize:11,padding:"3px 8px",color:"#A32D2D"}} onClick={()=>cancelSub(sh.id)}>Cancelar</button>}
+        </div>}
+        {sh.tipo==="cobertura_ps"&&isAcionado(sh)&&<div style={{...s.row,justifyContent:"space-between",marginBottom:8,padding:"8px 10px",borderRadius:8,background:"#FDF0E6"}}>
+          <span style={{fontSize:12,color:"#C25E00"}}>🔔 Acionado: <b>{mName(acionadoId(sh)!)}</b></span>
+          {(isAdmin||myId===sh.membroId)&&<button style={{...s.out,fontSize:11,padding:"3px 8px",color:"#A32D2D"}} onClick={async()=>{
+            await supabase.from("shifts").update({check_in:null}).eq("id",sh.id);
+            setShifts(p=>p.map(x=>x.id===sh.id?{...x,checkIn:null}:x));
+          }}>Cancelar</button>}
         </div>}
         <div style={{...s.row,gap:6,flexWrap:"wrap"}}>
           {sh.tipo!=="cobertura_ps"&&<span style={{fontSize:12,color:"var(--color-text-secondary)",flex:1}}>In: <b>{sh.checkIn||"—"}</b> Out: <b>{sh.checkOut||"—"}</b></span>}
@@ -548,7 +590,7 @@ export default function App(){
       <div>
         {isAdmin&&<>
           <div style={{fontWeight:500,fontSize:15,marginBottom:8}}>Tipos de plantão</div>
-          {stypes.map(t=>(
+          {stypes.filter(t=>t.id!=="acionamento_ps").map(t=>(
             <div key={t.id} style={{...s.card,padding:"12px",borderLeft:`3px solid ${t.color}`,marginBottom:8}}>
               {editId===t.id?(
                 <div>
@@ -573,6 +615,34 @@ export default function App(){
               )}
             </div>
           ))}
+          {/* Seção Acionamento PS */}
+          <div style={{fontWeight:500,fontSize:15,margin:"12px 0 8px"}}>Acionamento PS</div>
+          {(()=>{
+            const tAc=stypes.find(x=>x.id==="acionamento_ps")!;
+            const tarAc=(tarifas as any)["acionamento_ps"]||{bruto:0,liquido:0};
+            return editId==="acionamento_ps"?(
+              <div style={{...s.card,padding:"12px",borderLeft:`3px solid ${tAc.color}`,marginBottom:8}}>
+                <div style={{marginBottom:8}}><label style={s.lbl}>Nome</label><input style={s.inp} value={ef.label} onChange={e=>setEf(p=>({...p,label:e.target.value}))}/></div>
+                <div style={{...s.row,gap:8,marginBottom:10}}>
+                  <div style={{flex:1}}><label style={s.lbl}>Bruto (R$)</label><input type="number" style={s.inp} value={ef.bruto} onChange={e=>setEf(p=>({...p,bruto:Number(e.target.value)}))}/></div>
+                  <div style={{flex:1}}><label style={s.lbl}>Líquido (R$)</label><input type="number" style={s.inp} value={ef.liquido} onChange={e=>setEf(p=>({...p,liquido:Number(e.target.value)}))}/></div>
+                </div>
+                <div style={{...s.row,gap:6}}><button style={{...s.out,flex:1}} onClick={()=>setEditId(null)}>Cancelar</button><button style={{...s.btn(),flex:1}} onClick={()=>saveEdit("acionamento_ps")}>Salvar</button></div>
+              </div>
+            ):(
+              <div style={{...s.card,padding:"12px",borderLeft:`3px solid ${tAc.color}`,marginBottom:8}}>
+                <div style={{...s.row,justifyContent:"space-between",marginBottom:6}}>
+                  <div style={{...s.row,gap:8}}><span style={{width:10,height:10,borderRadius:"50%",background:tAc.color,display:"inline-block"}}/><span style={{fontWeight:500}}>{tAc.label}</span></div>
+                  <button style={{...s.out,fontSize:12,padding:"4px 10px"}} onClick={()=>startEdit(tAc)}>Editar</button>
+                </div>
+                <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:8}}>Valor cobrado quando um médico aciona uma Cobertura PS</div>
+                <div style={{...s.row,gap:16}}>
+                  <div><div style={s.lbl}>Bruto</div><div style={{fontWeight:500,color:"#C25E00"}}>R$ {tarAc.bruto.toLocaleString("pt-BR")}</div></div>
+                  <div><div style={s.lbl}>Líquido</div><div style={{fontWeight:500,color:"#C25E00"}}>R$ {tarAc.liquido.toLocaleString("pt-BR")}</div></div>
+                </div>
+              </div>
+            );
+          })()}
           <div style={s.sep}/>
         </>}
         <div style={{fontWeight:500,fontSize:15,margin:"12px 0 8px"}}>Alterar minha senha</div>
