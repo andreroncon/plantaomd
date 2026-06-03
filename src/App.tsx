@@ -168,7 +168,7 @@ export default function App(){
     row:{display:"flex",gap:8,alignItems:"center"},
     sep:{height:"0.5px",background:"var(--color-border-tertiary)",margin:"8px 0"},
     ovl:{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:100},
-    sht:{background:"var(--color-background-primary)",borderRadius:"16px 16px 0 0",padding:20,width:"100%",maxWidth:420,maxHeight:"84vh",overflowY:"auto"},
+    sht:{background:"#fff",color:"#222",borderRadius:"16px 16px 0 0",padding:20,width:"100%",maxWidth:420,maxHeight:"84vh",overflowY:"auto"},
     ful:{position:"fixed",inset:0,background:"#fff",zIndex:200,display:"flex",flexDirection:"column",maxWidth:420,margin:"0 auto",overflow:"hidden"},
   };
 
@@ -608,9 +608,9 @@ export default function App(){
       const toAdd: any[]=[];
       const base={membro_id:sh.membroId,inicio:sh.inicio,fim:sh.fim,tipo:sh.tipo,status:"agendado",check_in:null,check_out:null,substituto_id:null};
       if(novaFreq==="Único") toAdd.push({...base,data:sh.data});
-      else if(novaFreq==="Semanal")    for(let i=0;i<53;i++){const d=new Date(sh.data);d.setDate(d.getDate()+7*i);toAdd.push({...base,data:d.toISOString().slice(0,10)});}
-      else if(novaFreq==="Quinzenal")  for(let i=0;i<27;i++){const d=new Date(sh.data);d.setDate(d.getDate()+14*i);toAdd.push({...base,data:d.toISOString().slice(0,10)});}
-      else if(novaFreq==="Mensal")     for(let i=0;i<12;i++){const d=new Date(sh.data);d.setMonth(d.getMonth()+i);toAdd.push({...base,data:d.toISOString().slice(0,10)});}
+      else if(novaFreq==="Semanal")    for(let i=0;i<53;i++){const d=new Date(sh.data+"T12:00:00");d.setDate(d.getDate()+7*i);toAdd.push({...base,data:localDateStr(d)});}
+      else if(novaFreq==="Quinzenal")  for(let i=0;i<27;i++){const d=new Date(sh.data+"T12:00:00");d.setDate(d.getDate()+14*i);toAdd.push({...base,data:localDateStr(d)});}
+      else if(novaFreq==="Mensal")     for(let i=0;i<12;i++){const d=new Date(sh.data+"T12:00:00");d.setMonth(d.getMonth()+i);toAdd.push({...base,data:localDateStr(d)});}
       const {data}=await supabase.from("shifts").insert(toAdd).select();
       setShifts(p=>[...p.filter(s=>!ids.includes(s.id)),...(data||[]).map(dbToShift)]);
       setModal(null);
@@ -724,7 +724,7 @@ export default function App(){
         const novas: any[]=[]; const dow=new Date(base.data+"T12:00").getDay();
         const d0=new Date(hoje); while(d0.getDay()!==dow) d0.setDate(d0.getDate()+1);
         let d=new Date(d0); const fim=new Date(); fim.setFullYear(fim.getFullYear()+1);
-        while(d<=fim){ novas.push({membro_id:membId,data:d.toISOString().slice(0,10),inicio:base.inicio,fim:base.fim,tipo:tipoId,status:"agendado",check_in:null,check_out:null,substituto_id:null}); d=new Date(d); d.setDate(d.getDate()+sem*7); }
+        while(d<=fim){ novas.push({membro_id:membId,data:localDateStr(d),inicio:base.inicio,fim:base.fim,tipo:tipoId,status:"agendado",check_in:null,check_out:null,substituto_id:null}); d=new Date(d); d.setDate(d.getDate()+sem*7); }
         const {data}=await supabase.from("shifts").insert(novas).select();
         setShifts(prev=>{ const filt=prev.filter(s=>!(s.membroId===membId&&s.tipo===tipoId&&s.status==="agendado"&&new Date(s.data+"T12:00")>=hoje)); return [...filt,...(data||[]).map(dbToShift)]; });
       }
@@ -790,9 +790,9 @@ export default function App(){
     async function addShift(){
       const base={membroId:Number(nsh.membroId),data:nsh.data,inicio:nsh.inicio,fim:nsh.fim,tipo:nsh.tipo};
       let toAdd=[{...base}];
-      if(nsh.freq==="Semanal") for(let i=1;i<53;i++){const d=new Date(nsh.data);d.setDate(d.getDate()+7*i);toAdd.push({...base,data:d.toISOString().slice(0,10)});}
-      else if(nsh.freq==="Quinzenal") for(let i=1;i<27;i++){const d=new Date(nsh.data);d.setDate(d.getDate()+14*i);toAdd.push({...base,data:d.toISOString().slice(0,10)});}
-      else if(nsh.freq==="Mensal") for(let i=1;i<12;i++){const d=new Date(nsh.data);d.setMonth(d.getMonth()+i);toAdd.push({...base,data:d.toISOString().slice(0,10)});}
+      if(nsh.freq==="Semanal") for(let i=1;i<53;i++){const d=new Date(nsh.data+"T12:00:00");d.setDate(d.getDate()+7*i);toAdd.push({...base,data:localDateStr(d)});}
+      else if(nsh.freq==="Quinzenal") for(let i=1;i<27;i++){const d=new Date(nsh.data+"T12:00:00");d.setDate(d.getDate()+14*i);toAdd.push({...base,data:localDateStr(d)});}
+      else if(nsh.freq==="Mensal") for(let i=1;i<12;i++){const d=new Date(nsh.data+"T12:00:00");d.setMonth(d.getMonth()+i);toAdd.push({...base,data:localDateStr(d)});}
       const toInsert=toAdd.map(s=>shiftToDb({...s,status:"agendado",checkIn:null,checkOut:null,substitutoId:null}));
       const {data}=await supabase.from("shifts").insert(toInsert).select();
       if(data) setShifts(p=>[...p,...data.map(dbToShift)]);
