@@ -293,7 +293,7 @@ export default function App(){
         {sh.tipo==="cobertura_ps"&&sh.status==="agendado"&&!isAcionado(sh)&&!sh.substitutoId&&<div style={{marginBottom:8}}>
           {/* --- Substituição → PS --- */}
           <div style={{...s.row,justifyContent:"space-between",marginBottom:4}}>
-            <span style={{fontSize:12,color:"#185FA5",fontWeight:500}}>Substituir por Plantão PS</span>
+            <span style={{fontSize:12,color:"#185FA5",fontWeight:500}}>Substituição pontual</span>
             <button style={{...s.out,fontSize:11,padding:"3px 8px"}} onClick={()=>setEs(v=>!v)}>{es?"✕":"Indicar"}</button>
           </div>
           {es&&<div style={{...s.row,gap:6,marginBottom:8}}>
