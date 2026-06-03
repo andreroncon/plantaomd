@@ -268,10 +268,13 @@ export default function App(){
           </div>
           {es&&!sub&&<div style={{...s.row,gap:6}}>
             <select style={{...s.inp,flex:1}} value={ss2} onChange={e=>setSs2(Number(e.target.value))}>
-              {/* Admin ou responsável veem lista completa; outros médicos veem só a si mesmos */}
-              {(isAdmin||myId===sh.membroId
-                ? sorted.filter((m:any)=>m.id!==sh.membroId)
-                : sorted.filter((m:any)=>m.id===myId)
+              {/* cobertura_ps: todos veem lista completa (inclusive o responsável)
+                  Outros plantões: admin/responsável veem todos; demais veem só a si mesmos */}
+              {(sh.tipo==="cobertura_ps"
+                ? sorted
+                : isAdmin||myId===sh.membroId
+                  ? sorted.filter((m:any)=>m.id!==sh.membroId)
+                  : sorted.filter((m:any)=>m.id===myId)
               ).map((m:any)=><option key={m.id} value={m.id}>{m.nome}</option>)}
             </select>
             <button style={s.btn()} onClick={()=>{setSub(sh.id,ss2);setEs(false);}}>OK</button>
@@ -652,16 +655,17 @@ export default function App(){
             </div>
           </div>}
           <div style={s.sep}/>
-          <div style={{...s.row,gap:10,marginBottom:12}}>
+          {sh.tipo!=="cobertura_ps"&&<div style={{...s.row,gap:10,marginBottom:12}}>
             {[["Entrada",sh.checkIn],["Saída",sh.checkOut]].map(([l,v])=>(
               <div key={l} style={{flex:1,padding:"10px",borderRadius:8,background:"var(--color-background-secondary)",textAlign:"center"}}>
                 <div style={s.lbl}>{l}</div><div style={{fontWeight:500,fontSize:15}}>{v||"—"}</div>
               </div>
             ))}
-          </div>
+          </div>}
+          {sh.tipo==="cobertura_ps"&&<div style={{fontSize:12,color:"#A32D2D",fontStyle:"italic",marginBottom:12}}>Sem check-in/out para Cobertura PS</div>}
           <div style={{...s.row,gap:8,marginBottom:isAdmin?10:0}}>
-            {sh.status==="agendado"&&<button style={{...s.btn("#0F6E56"),flex:1}} onClick={()=>{checkin(sh.id);setModal(null);}}>Registrar entrada</button>}
-            {sh.status==="ativo"&&<button style={{...s.btn("#BA7517"),flex:1}} onClick={()=>{checkout(sh.id);setModal(null);}}>Registrar saída</button>}
+            {sh.tipo!=="cobertura_ps"&&sh.status==="agendado"&&(isAdmin||myId===sh.membroId||myId===sh.substitutoId)&&<button style={{...s.btn("#0F6E56"),flex:1}} onClick={()=>{checkin(sh.id);setModal(null);}}>Registrar entrada</button>}
+            {sh.tipo!=="cobertura_ps"&&sh.status==="ativo"&&(isAdmin||myId===sh.membroId||myId===sh.substitutoId)&&<button style={{...s.btn("#BA7517"),flex:1}} onClick={()=>{checkout(sh.id);setModal(null);}}>Registrar saída</button>}
             {isAdmin&&<button style={{...s.out,color:"#A32D2D"}} onClick={()=>{delShift(sh.id);setModal(null);}}>Excluir este</button>}
           </div>
           {/* Opções de gestão em série — apenas admin */}
