@@ -27,7 +27,15 @@ const INIT_SHIFT_TYPES = [
   {id:"acionamento_ps", label:"Acionamento PS",     color:"#C25E00", bg:"#FDF0E6"},
 ];
 
-const DEFAULT_TARIFAS = Object.fromEntries(INIT_SHIFT_TYPES.map(t=>[t.id,{bruto:1000,liquido:800}]));
+const DEFAULT_TARIFAS: any = {
+  plantao_ps:     {bruto:2136, liquido:1700},
+  cirurgia_el:    {bruto:2136, liquido:1700},
+  horizontal:     {bruto:1068, liquido:900},
+  coloproct:      {bruto:2136, liquido:1700},
+  ps_noite:       {bruto:2136, liquido:1700},
+  cobertura_ps:   {bruto:712,  liquido:600},
+  acionamento_ps: {bruto:2136, liquido:1700},
+};
 
 let _uid = Date.now();
 const uid = () => ++_uid;
@@ -375,12 +383,15 @@ export default function App(){
         {todayS.length===0&&<div style={{textAlign:"center",color:"var(--color-text-secondary)",padding:"20px 0",fontSize:13}}>Nenhum plantão</div>}
         {todayS.map(sh=>{
           const t=stOf(sh.tipo); const sub=sh.substitutoId?mById(sh.substitutoId):null;
+          const acionado=isAcionado(sh); const tAc=stOf("acionamento_ps");
+          const displayT=acionado?tAc:t;
+          const displayLabel=acionado?"Acionado":sh.substitutoId&&sh.tipo==="cobertura_ps"?"Sub. PS":t.label;
           return(
-            <div key={sh.id} style={{...s.card,borderLeft:`3px solid ${t.color}`,display:"flex",alignItems:"center",gap:10}}>
+            <div key={sh.id} style={{...s.card,borderLeft:`3px solid ${displayT.color}`,display:"flex",alignItems:"center",gap:10}}>
               <div style={{flex:1,cursor:"pointer"}} onClick={()=>setModal({type:"editShift",shiftId:sh.id})}>
-                <div style={{...s.row,gap:6,marginBottom:3}}><span style={s.bdg(t.color,t.bg)}>{t.label}</span><span style={{fontSize:12,color:"var(--color-text-secondary)"}}>{sh.inicio}–{sh.fim}</span></div>
-                <div style={{fontSize:13,fontWeight:500}}>{mName(sh.membroId)}</div>
-                {sub&&<div style={{fontSize:12,color:t.color}}>Sub.: {(sub as any).nome}</div>}
+                <div style={{...s.row,gap:6,marginBottom:3}}><span style={s.bdg(displayT.color,displayT.bg)}>{displayLabel}</span><span style={{fontSize:12,color:"var(--color-text-secondary)"}}>{sh.inicio}–{sh.fim}</span></div>
+                <div style={{fontSize:13,fontWeight:500}}>{acionado?mName(acionadoId(sh)!):mName(sh.membroId)}</div>
+                {sub&&!acionado&&<div style={{fontSize:12,color:t.color}}>Sub.: {(sub as any).nome}</div>}
               </div>
               {isAdmin
                 ? <button style={{...s.out,color:"#A32D2D",fontSize:13,padding:"6px 10px",flexShrink:0}} onClick={e=>{e.stopPropagation();delShift(sh.id);}}>✕</button>
