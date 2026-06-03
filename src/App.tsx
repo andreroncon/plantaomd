@@ -584,7 +584,38 @@ export default function App(){
     const sh=shifts.find(s=>s.id===shiftId); if(!sh) return null;
     const t=stOf(sh.tipo); const sub=sh.substitutoId?mById(sh.substitutoId):null;
     const [sr,setSr]=useState(sh.membroId);
+    const [showFreq,setShowFreq]=useState(false);
+    const [novaFreq,setNovaFreq]=useState("Semanal");
     const sorted=[...members].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
+
+    // Conta quantos plantões agendados futuros existem (mesmo médico + tipo)
+    const futuros=shifts.filter(s=>s.membroId===sh.membroId&&s.tipo===sh.tipo&&s.status==="agendado"&&s.data>=sh.data);
+
+    async function delEsteEProximos(){
+      if(!window.confirm(`Excluir este plantão e mais ${futuros.length-1} futuros de ${mName(sh.membroId)} (${t.label})?`)) return;
+      const ids=futuros.map(s=>s.id);
+      await supabase.from("shifts").delete().in("id",ids);
+      setShifts(p=>p.filter(s=>!ids.includes(s.id)));
+      setModal(null);
+    }
+
+    async function aplicarNovaFreq(){
+      if(!window.confirm(`Alterar frequência para "${novaFreq}" a partir de ${new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")}?`)) return;
+      // Exclui todos os agendados futuros do mesmo médico+tipo a partir desta data
+      const ids=futuros.map(s=>s.id);
+      if(ids.length) await supabase.from("shifts").delete().in("id",ids);
+      // Gera novos plantões com a nova frequência
+      const toAdd: any[]=[];
+      const base={membro_id:sh.membroId,inicio:sh.inicio,fim:sh.fim,tipo:sh.tipo,status:"agendado",check_in:null,check_out:null,substituto_id:null};
+      if(novaFreq==="Único") toAdd.push({...base,data:sh.data});
+      else if(novaFreq==="Semanal")    for(let i=0;i<53;i++){const d=new Date(sh.data);d.setDate(d.getDate()+7*i);toAdd.push({...base,data:d.toISOString().slice(0,10)});}
+      else if(novaFreq==="Quinzenal")  for(let i=0;i<27;i++){const d=new Date(sh.data);d.setDate(d.getDate()+14*i);toAdd.push({...base,data:d.toISOString().slice(0,10)});}
+      else if(novaFreq==="Mensal")     for(let i=0;i<12;i++){const d=new Date(sh.data);d.setMonth(d.getMonth()+i);toAdd.push({...base,data:d.toISOString().slice(0,10)});}
+      const {data}=await supabase.from("shifts").insert(toAdd).select();
+      setShifts(p=>[...p.filter(s=>!ids.includes(s.id)),...(data||[]).map(dbToShift)]);
+      setModal(null);
+    }
+
     return(
       <div style={s.ovl} onClick={()=>setModal(null)}>
         <div style={s.sht} onClick={(e:any)=>e.stopPropagation()}>
@@ -623,11 +654,39 @@ export default function App(){
               </div>
             ))}
           </div>
-          <div style={{...s.row,gap:8}}>
+          <div style={{...s.row,gap:8,marginBottom:isAdmin?10:0}}>
             {sh.status==="agendado"&&<button style={{...s.btn("#0F6E56"),flex:1}} onClick={()=>{checkin(sh.id);setModal(null);}}>Registrar entrada</button>}
             {sh.status==="ativo"&&<button style={{...s.btn("#BA7517"),flex:1}} onClick={()=>{checkout(sh.id);setModal(null);}}>Registrar saída</button>}
-            {isAdmin&&<button style={{...s.out,color:"#A32D2D"}} onClick={()=>{delShift(sh.id);setModal(null);}}>Excluir</button>}
+            {isAdmin&&<button style={{...s.out,color:"#A32D2D"}} onClick={()=>{delShift(sh.id);setModal(null);}}>Excluir este</button>}
           </div>
+          {/* Opções de gestão em série — apenas admin */}
+          {isAdmin&&sh.status==="agendado"&&futuros.length>1&&<>
+            <div style={s.sep}/>
+            <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:8}}>
+              {futuros.length} plantões agendados deste médico · {t.label}
+            </div>
+            <button style={{...s.out,color:"#A32D2D",width:"100%",marginBottom:8,textAlign:"center"}} onClick={delEsteEProximos}>
+              🗑 Excluir este e todos os próximos ({futuros.length})
+            </button>
+            <button style={{...s.out,width:"100%",textAlign:"center"}} onClick={()=>setShowFreq(v=>!v)}>
+              🔁 {showFreq?"Cancelar":"Alterar frequência dos próximos"}
+            </button>
+            {showFreq&&<div style={{marginTop:10}}>
+              <label style={s.lbl}>Nova frequência (a partir desta data)</label>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginTop:4,marginBottom:10}}>
+                {FREQ_OPTS.map(f=>(
+                  <div key={f} onClick={()=>setNovaFreq(f)}
+                    style={{padding:"9px 6px",borderRadius:8,cursor:"pointer",textAlign:"center",fontSize:12,
+                      border:`1.5px solid ${novaFreq===f?"#185FA5":"var(--color-border-tertiary)"}`,
+                      background:novaFreq===f?"#E6F1FB":"transparent",
+                      color:novaFreq===f?"#185FA5":"var(--color-text-primary)",fontWeight:novaFreq===f?500:400}}>
+                    {f}
+                  </div>
+                ))}
+              </div>
+              <button style={{...s.btn(),width:"100%"}} onClick={aplicarNovaFreq}>Aplicar nova frequência</button>
+            </div>}
+          </>}
         </div>
       </div>
     );
