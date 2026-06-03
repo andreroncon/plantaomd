@@ -257,18 +257,22 @@ export default function App(){
             <button style={s.btn()} onClick={()=>{changeResp(sh.id,sr);setEr(false);}}>OK</button>
           </div>}
         </div>}
-        {/* Substituição: para cobertura_ps visível a todos; para outros, visível a todos também */}
+        {/* Substituição */}
         {sh.status==="agendado"&&<div style={{marginBottom:8}}>
           <div style={{...s.row,justifyContent:"space-between",marginBottom:4}}>
             <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>
               {sh.tipo==="cobertura_ps"?"Substituir por Plantão PS":"Substituição pontual"}
             </span>
-            {sub?<button style={{...s.out,fontSize:11,padding:"3px 8px",color:"#A32D2D"}} onClick={()=>cancelSub(sh.id)}>Cancelar sub.</button>
+            {sub?((isAdmin||myId===sh.membroId)&&<button style={{...s.out,fontSize:11,padding:"3px 8px",color:"#A32D2D"}} onClick={()=>cancelSub(sh.id)}>Cancelar sub.</button>)
                :<button style={{...s.out,fontSize:11,padding:"3px 8px"}} onClick={()=>setEs(v=>!v)}>{es?"✕":"Indicar"}</button>}
           </div>
           {es&&!sub&&<div style={{...s.row,gap:6}}>
             <select style={{...s.inp,flex:1}} value={ss2} onChange={e=>setSs2(Number(e.target.value))}>
-              {sorted.filter((m:any)=>m.id!==sh.membroId).map((m:any)=><option key={m.id} value={m.id}>{m.nome}</option>)}
+              {/* Admin ou responsável veem lista completa; outros médicos veem só a si mesmos */}
+              {(isAdmin||myId===sh.membroId
+                ? sorted.filter((m:any)=>m.id!==sh.membroId)
+                : sorted.filter((m:any)=>m.id===myId)
+              ).map((m:any)=><option key={m.id} value={m.id}>{m.nome}</option>)}
             </select>
             <button style={s.btn()} onClick={()=>{setSub(sh.id,ss2);setEs(false);}}>OK</button>
           </div>}
@@ -277,8 +281,9 @@ export default function App(){
         <div style={{...s.row,gap:6,flexWrap:"wrap"}}>
           {sh.tipo!=="cobertura_ps"&&<span style={{fontSize:12,color:"var(--color-text-secondary)",flex:1}}>In: <b>{sh.checkIn||"—"}</b> Out: <b>{sh.checkOut||"—"}</b></span>}
           {sh.tipo==="cobertura_ps"&&<span style={{fontSize:12,color:"var(--color-text-secondary)",flex:1,fontStyle:"italic"}}>Sem necessidade de check-in/out</span>}
-          {sh.tipo!=="cobertura_ps"&&sh.status==="agendado"&&<button style={s.btn("#0F6E56")} onClick={()=>checkin(sh.id)}>Entrada</button>}
-          {sh.tipo!=="cobertura_ps"&&sh.status==="ativo"&&<button style={s.btn("#BA7517")} onClick={()=>checkout(sh.id)}>Saída</button>}
+          {/* Check-in/out: apenas o próprio médico responsável (ou substituto) e o admin */}
+          {sh.tipo!=="cobertura_ps"&&sh.status==="agendado"&&(isAdmin||myId===sh.membroId||myId===sh.substitutoId)&&<button style={s.btn("#0F6E56")} onClick={()=>checkin(sh.id)}>Entrada</button>}
+          {sh.tipo!=="cobertura_ps"&&sh.status==="ativo"&&(isAdmin||myId===sh.membroId||myId===sh.substitutoId)&&<button style={s.btn("#BA7517")} onClick={()=>checkout(sh.id)}>Saída</button>}
           {isAdmin&&<button style={{...s.out,color:"#A32D2D",fontSize:12,padding:"6px 8px"}} onClick={()=>delShift(sh.id)}>✕</button>}
         </div>
       </div>
