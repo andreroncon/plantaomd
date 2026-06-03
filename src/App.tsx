@@ -785,7 +785,7 @@ export default function App(){
 
   function NovoPlantaoModal(){
     const [step,setStep]=useState(1);
-    const [nsh,setNsh]=useState({membroId:members[0]?.id||1,data:localDateStr(new Date()),inicio:"07:00",fim:"19:00",freq:"Único",tipo:"plantao_ps"});
+    const [nsh,setNsh]=useState({membroId:members[0]?.id||1,data:selDate,inicio:"07:00",fim:"19:00",freq:"Único",tipo:"plantao_ps"});
     const sorted=[...members].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
     async function addShift(){
       const base={membroId:Number(nsh.membroId),data:nsh.data,inicio:nsh.inicio,fim:nsh.fim,tipo:nsh.tipo};
