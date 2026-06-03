@@ -154,7 +154,7 @@ export default function App(){
   function gerarRelatorioEquipe(year: number,month: number){ const html=buildTeamReportHTML(year,month); const title=`Relatório Equipe — ${MONTHS[month]}/${year}`; saveReport(title,html,null); openHTML(html); }
 
   const s: any = {
-    app:{fontFamily:"system-ui,sans-serif",maxWidth:420,margin:"0 auto",background:"var(--color-background-tertiary)",height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden"},
+    app:{fontFamily:"system-ui,sans-serif",maxWidth:420,margin:"0 auto",background:"var(--color-background-tertiary)",height:"100dvh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",overflow:"hidden"},
     hdr:{background:"#185FA5",color:"#fff",padding:"14px 16px 10px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0},
     body:{flex:1,padding:"12px 12px 12px",overflowY:"auto"},
     nav:{display:"flex",background:"var(--color-background-primary)",borderTop:"0.5px solid var(--color-border-tertiary)",flexShrink:0},
