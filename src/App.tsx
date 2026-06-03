@@ -119,19 +119,27 @@ export default function App(){
   }
   const cancelSub = async(sid: number)=>{ await supabase.from("shifts").update({substituto_id:null}).eq("id",sid); setShifts(p=>p.map(s=>s.id===sid?{...s,substitutoId:null}:s)); };
 
+  // Tipo efetivo para faturamento: cobertura_ps com substituto → fatura como plantao_ps
+  function tipoEfetivo(s: any){ return s.tipo==="cobertura_ps"&&s.substitutoId?"plantao_ps":s.tipo; }
+
   function calcMes(membId: number,year: number,month: number){
     const m=mById(membId); if(!m) return{bruto:0,liquido:0,list:[]};
     const key=`${year}-${String(month+1).padStart(2,"0")}`;
-    const done=shifts.filter(s=>{ if(s.status!=="concluido"||!s.data.startsWith(key)) return false; return (s.substitutoId||s.membroId)===membId; });
+    const done=shifts.filter(s=>{
+      if(!s.data.startsWith(key)) return false;
+      if((s.substitutoId||s.membroId)!==membId) return false;
+      if(s.tipo==="cobertura_ps") return true; // cobertura PS não precisa de check-in/out
+      return s.checkIn!==null||s.checkOut!==null; // outros: basta check-in OU check-out
+    });
     let bruto=0,liquido=0;
-    done.forEach(s=>{ const tar=(tarifas as any)[s.tipo]||{bruto:0,liquido:0}; bruto+=tar.bruto; liquido+=tar.liquido; });
+    done.forEach(s=>{ const tar=(tarifas as any)[tipoEfetivo(s)]||{bruto:0,liquido:0}; bruto+=tar.bruto; liquido+=tar.liquido; });
     return{bruto,liquido,list:done};
   }
 
   function buildReportHTML(membId: number,year: number,month: number,adminView: boolean){
     const m=mById(membId); if(!m) return"";
     const{bruto,liquido,list}=calcMes(membId,year,month);
-    const rows=list.map(sh=>{ const t=stOf(sh.tipo); const tar=(tarifas as any)[sh.tipo]||{bruto:0,liquido:0}; return`<tr><td>${new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")}</td><td style="color:${t.color}">${t.label}</td><td>${sh.inicio}–${sh.fim}</td><td>${mName(sh.membroId)}</td><td>${sh.substitutoId?mName(sh.substitutoId):"—"}</td>${adminView?`<td>R$ ${tar.bruto.toLocaleString("pt-BR")}</td>`:""}<td>R$ ${tar.liquido.toLocaleString("pt-BR")}</td></tr>`; }).join("");
+    const rows=list.map(sh=>{ const t=stOf(sh.tipo); const tar=(tarifas as any)[tipoEfetivo(sh)]||{bruto:0,liquido:0}; return`<tr><td>${new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")}</td><td style="color:${t.color}">${t.label}${sh.tipo==="cobertura_ps"&&sh.substitutoId?" → PS":""}</td><td>${sh.inicio}–${sh.fim}</td><td>${mName(sh.membroId)}</td><td>${sh.substitutoId?mName(sh.substitutoId):"—"}</td>${adminView?`<td>R$ ${tar.bruto.toLocaleString("pt-BR")}</td>`:""}<td>R$ ${tar.liquido.toLocaleString("pt-BR")}</td></tr>`; }).join("");
     return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório ${MONTHS[month]}/${year} – ${m.nome}</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#222}h1{color:#185FA5;font-size:18px}.sub{color:#555;font-size:13px;margin-bottom:16px}.sum{display:flex;gap:20px;margin:16px 0;padding:12px;background:#f0f6ff;border-radius:8px}.sl{font-size:11px;color:#555}.sv{font-size:16px;font-weight:bold;color:#185FA5}table{width:100%;border-collapse:collapse;font-size:11px;margin-top:12px}th{background:#185FA5;color:#fff;padding:7px 5px;text-align:left}td{padding:6px 5px;border-bottom:1px solid #eee}.ft{margin-top:20px;font-size:10px;color:#aaa}</style></head><body><h1>Relatório de Plantões — ${MONTHS[month]} ${year}</h1><div class="sub">${m.nome} · CRM-SP: ${m.crmsp||""} · ${m.esp}</div><div class="sum"><div><div class="sl">Plantões</div><div class="sv">${list.length}</div></div>${adminView?`<div><div class="sl">Bruto</div><div class="sv">R$ ${bruto.toLocaleString("pt-BR")}</div></div>`:""}<div><div class="sl">Líquido</div><div class="sv">R$ ${liquido.toLocaleString("pt-BR")}</div></div></div><table><thead><tr><th>Data</th><th>Tipo</th><th>Horário</th><th>Responsável</th><th>Substituto</th>${adminView?"<th>Bruto</th>":""}<th>Líquido</th></tr></thead><tbody>${rows}</tbody></table><div class="ft">Gerado em ${new Date().toLocaleString("pt-BR")} · PlantãoMed</div></body></html>`;
   }
 
@@ -249,9 +257,12 @@ export default function App(){
             <button style={s.btn()} onClick={()=>{changeResp(sh.id,sr);setEr(false);}}>OK</button>
           </div>}
         </div>}
+        {/* Substituição: para cobertura_ps visível a todos; para outros, visível a todos também */}
         {sh.status==="agendado"&&<div style={{marginBottom:8}}>
           <div style={{...s.row,justifyContent:"space-between",marginBottom:4}}>
-            <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>Substituição pontual</span>
+            <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>
+              {sh.tipo==="cobertura_ps"?"Substituir por Plantão PS":"Substituição pontual"}
+            </span>
             {sub?<button style={{...s.out,fontSize:11,padding:"3px 8px",color:"#A32D2D"}} onClick={()=>cancelSub(sh.id)}>Cancelar sub.</button>
                :<button style={{...s.out,fontSize:11,padding:"3px 8px"}} onClick={()=>setEs(v=>!v)}>{es?"✕":"Indicar"}</button>}
           </div>
@@ -261,11 +272,13 @@ export default function App(){
             </select>
             <button style={s.btn()} onClick={()=>{setSub(sh.id,ss2);setEs(false);}}>OK</button>
           </div>}
+          {sh.tipo==="cobertura_ps"&&sub&&<div style={{fontSize:11,color:"#185FA5",marginTop:4}}>💡 Faturado como Plantão PS</div>}
         </div>}
         <div style={{...s.row,gap:6,flexWrap:"wrap"}}>
-          <span style={{fontSize:12,color:"var(--color-text-secondary)",flex:1}}>In: <b>{sh.checkIn||"—"}</b> Out: <b>{sh.checkOut||"—"}</b></span>
-          {sh.status==="agendado"&&<button style={s.btn("#0F6E56")} onClick={()=>checkin(sh.id)}>Entrada</button>}
-          {sh.status==="ativo"&&<button style={s.btn("#BA7517")} onClick={()=>checkout(sh.id)}>Saída</button>}
+          {sh.tipo!=="cobertura_ps"&&<span style={{fontSize:12,color:"var(--color-text-secondary)",flex:1}}>In: <b>{sh.checkIn||"—"}</b> Out: <b>{sh.checkOut||"—"}</b></span>}
+          {sh.tipo==="cobertura_ps"&&<span style={{fontSize:12,color:"var(--color-text-secondary)",flex:1,fontStyle:"italic"}}>Sem necessidade de check-in/out</span>}
+          {sh.tipo!=="cobertura_ps"&&sh.status==="agendado"&&<button style={s.btn("#0F6E56")} onClick={()=>checkin(sh.id)}>Entrada</button>}
+          {sh.tipo!=="cobertura_ps"&&sh.status==="ativo"&&<button style={s.btn("#BA7517")} onClick={()=>checkout(sh.id)}>Saída</button>}
           {isAdmin&&<button style={{...s.out,color:"#A32D2D",fontSize:12,padding:"6px 8px"}} onClick={()=>delShift(sh.id)}>✕</button>}
         </div>
       </div>
