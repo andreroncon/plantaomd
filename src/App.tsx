@@ -18,7 +18,7 @@ const DAYS   = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 const FREQ_OPTS = ["Único","Semanal","Quinzenal","Mensal"];
 
 const INIT_SHIFT_TYPES = [
-  {id:"plantao_ps",     label:"Plantão PS",        color:"#185FA5", bg:"#E6F1FB"},
+  {id:"plantao_ps",     label:"PS Diurno",          color:"#185FA5", bg:"#E6F1FB"},
   {id:"cirurgia_el",    label:"Cirurgia Eletiva",   color:"#0F6E56", bg:"#E1F5EE"},
   {id:"horizontal",     label:"Horizontal",         color:"#BA7517", bg:"#FAEEDA"},
   {id:"coloproct",      label:"Coloproctologia",    color:"#533AB7", bg:"#EEEDFE"},
