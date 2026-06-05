@@ -25,6 +25,7 @@ const INIT_SHIFT_TYPES = [
   {id:"ps_noite",       label:"PS Noite",           color:"#993556", bg:"#FBEAF0"},
   {id:"cobertura_ps",   label:"Cobertura PS",       color:"#A32D2D", bg:"#FCEBEB"},
   {id:"acionamento_ps", label:"Acionamento PS",     color:"#C25E00", bg:"#FDF0E6"},
+  {id:"meio_periodo",   label:"Meio Período",       color:"#0891B2", bg:"#E0F7FB"},
 ];
 
 const DEFAULT_TARIFAS: any = {
@@ -35,7 +36,16 @@ const DEFAULT_TARIFAS: any = {
   ps_noite:       {bruto:2136, liquido:1700},
   cobertura_ps:   {bruto:712,  liquido:600},
   acionamento_ps: {bruto:2136, liquido:1700},
+  meio_periodo:   {bruto:1068, liquido:850},
 };
+
+const MEIO_PERIODO_SLOTS = [
+  {label:"7h – 13h",  inicio:"07:00", fim:"13:00"},
+  {label:"13h – 19h", inicio:"13:00", fim:"19:00"},
+  {label:"19h – 1h",  inicio:"19:00", fim:"01:00"},
+  {label:"1h – 7h",   inicio:"01:00", fim:"07:00"},
+];
+const MEIO_PERIODO_SUB_TIPOS = ["plantao_ps","cirurgia_el","ps_noite","coloproct"];
 
 let _uid = Date.now();
 const uid = () => ++_uid;
@@ -170,6 +180,22 @@ export default function App(){
     return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório Equipe ${MONTHS[month]}/${year}</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#222}h1{color:#185FA5;font-size:18px}table{width:100%;border-collapse:collapse;font-size:11px;margin-top:16px}th{background:#185FA5;color:#fff;padding:8px 6px;text-align:left}td{padding:6px;border-bottom:1px solid #eee}.ft{margin-top:20px;font-size:10px;color:#aaa}</style></head><body><h1>Relatório da Equipe — ${MONTHS[month]} ${year}</h1><table><thead><tr><th>Tipo</th><th>Datas</th><th>Bruto</th><th>Líquido</th></tr></thead><tbody>${rows}</tbody></table><div class="ft">Gerado em ${new Date().toLocaleString("pt-BR")} · PlantãoMed</div></body></html>`;
   }
 
+  function buildEscalaHTML(year: number, month: number){
+    const key=`${year}-${String(month+1).padStart(2,"0")}`;
+    const ms=[...shifts.filter(s=>s.data.startsWith(key))].sort((a,b)=>a.data.localeCompare(b.data)||a.inicio.localeCompare(b.inicio));
+    const rows=ms.map(sh=>{
+      const dia=new Date(sh.data+"T12:00").toLocaleDateString("pt-BR",{weekday:"short",day:"2-digit",month:"2-digit"});
+      const effId=sh.substitutoId||sh.membroId;
+      const m=mById(effId);
+      const t=stOf(sh.tipo);
+      const label=isAcionado(sh)?stOf("acionamento_ps").label:t.label;
+      const color=isAcionado(sh)?stOf("acionamento_ps").color:t.color;
+      const sub=sh.substitutoId&&!isAcionado(sh)?` <span style="font-size:10px;color:#888">(sub.)</span>`:"";
+      return `<tr><td style="white-space:nowrap">${dia}</td><td>${m?.nome||"—"}${sub}</td><td>${m?.tel||"—"}</td><td>${m?.crmsp||"—"}</td><td style="color:${color};font-weight:500">${label} ${sh.inicio}–${sh.fim}</td></tr>`;
+    }).join("");
+    return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Escala ${MONTHS[month]}/${year}</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#222}h1{color:#185FA5;font-size:17px;margin-bottom:4px}.sub{color:#555;font-size:12px;margin-bottom:16px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#185FA5;color:#fff;padding:8px 7px;text-align:left}td{padding:7px;border-bottom:1px solid #eee}tr:nth-child(even){background:#f8fbff}@media print{body{padding:12px}}.ft{margin-top:18px;font-size:10px;color:#aaa}</style></head><body><h1>Escala de Plantões — ${MONTHS[month]} ${year}</h1><div class="sub">Gerado em ${new Date().toLocaleString("pt-BR")} · PlantãoMed</div><table><thead><tr><th>Dia</th><th>Médico</th><th>Telefone</th><th>CRM-SP</th><th>Plantão / Horário</th></tr></thead><tbody>${rows}</tbody></table><div class="ft">${ms.length} plantão(ões) no mês</div><script>window.onload=()=>window.print();<\/script></body></html>`;
+  }
+
   function openHTML(html: string){ const blob=new Blob([html],{type:"text/html;charset=utf-8"}); const url=URL.createObjectURL(blob); const w=window.open(url,"_blank"); if(!w){const a=document.createElement("a");a.href=url;a.download="relatorio.html";document.body.appendChild(a);a.click();a.remove();} setTimeout(()=>URL.revokeObjectURL(url),60000); }
   function saveReport(title: string,html: string,membId: any){ setSavedReports(p=>{ const f=p.filter(r=>r.title!==title); return [{id:uid(),title,html,date:new Date().toLocaleString("pt-BR"),membId:membId||null},...f]; }); }
   function gerarRelatorio(membId: number,year: number,month: number,adminView: boolean){ const m=mById(membId); if(!m) return; const html=buildReportHTML(membId,year,month,adminView); const title=`Relatório ${MONTHS[month]}/${year} – ${m.nome}`; saveReport(title,html,membId); openHTML(html); }
@@ -251,9 +277,10 @@ export default function App(){
   // ── SHIFT CARD ────────────────────────────────────────────────────────────
   function ShiftCard({sh}: any){
     const t=stOf(sh.tipo); const sub=sh.substitutoId?mById(sh.substitutoId):null;
-    const [er,setEr]=useState(false); const [es,setEs]=useState(false);
+    const [er,setEr]=useState(false); const [es,setEs]=useState(false); const [esmp,setEsmp]=useState(false);
     const [sr,setSr]=useState(sh.membroId);
     const [ss2,setSs2]=useState(members.find((m:any)=>m.id!==sh.membroId)?.id||1);
+    const [mpSlot,setMpSlot]=useState(MEIO_PERIODO_SLOTS[0]);
     const sorted=[...members].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
     return(
       <div style={{...s.card,borderLeft:`3px solid ${t.color}`}}>
@@ -297,6 +324,37 @@ export default function App(){
           </div>}
         </div>}
 
+        {/* Substituição Meio Período (apenas para 4 tipos elegíveis) */}
+        {MEIO_PERIODO_SUB_TIPOS.includes(sh.tipo)&&sh.status==="agendado"&&!sh.substitutoId&&<div style={{marginBottom:8}}>
+          <div style={{...s.row,justifyContent:"space-between",marginBottom:4}}>
+            <span style={{fontSize:12,color:"#0891B2",fontWeight:500}}>Substituição Meio Período</span>
+            <button style={{...s.out,fontSize:11,padding:"3px 8px",color:"#0891B2"}} onClick={()=>{setEsmp(v=>!v);setEs(false);}}>{esmp?"✕":"Indicar"}</button>
+          </div>
+          {esmp&&<div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8}}>
+              {MEIO_PERIODO_SLOTS.map(sl=>{
+                const sel=mpSlot.inicio===sl.inicio;
+                return(<div key={sl.label} onClick={()=>setMpSlot(sl)}
+                  style={{padding:"7px 4px",borderRadius:8,cursor:"pointer",textAlign:"center",border:`1.5px solid ${sel?"#0891B2":"var(--color-border-tertiary)"}`,background:sel?"#E0F7FB":"transparent",color:sel?"#0891B2":"var(--color-text-primary)",fontSize:11,fontWeight:sel?500:400}}>
+                  {sl.label}
+                </div>);
+              })}
+            </div>
+            <div style={{...s.row,gap:6}}>
+              <select style={{...s.inp,flex:1}} value={ss2} onChange={e=>setSs2(Number(e.target.value))}>
+                {(isAdmin||myId===sh.membroId ? sorted.filter((m:any)=>m.id!==sh.membroId) : sorted.filter((m:any)=>m.id===myId))
+                  .map((m:any)=><option key={m.id} value={m.id}>{m.nome}</option>)}
+              </select>
+              <button style={{...s.btn("#0891B2")}} onClick={async()=>{
+                const toInsert=shiftToDb({membroId:Number(ss2),data:sh.data,inicio:mpSlot.inicio,fim:mpSlot.fim,tipo:"meio_periodo",status:"agendado",checkIn:null,checkOut:null,substitutoId:sh.membroId});
+                const {data}=await supabase.from("shifts").insert(toInsert).select().single();
+                if(data) setShifts(p=>[...p,dbToShift(data)]);
+                addNotif(`${mName(Number(ss2))} cobrirá meio período (${mpSlot.label}) de ${mName(sh.membroId)} em ${sh.data}`,null);
+                setEsmp(false);
+              }}>OK</button>
+            </div>
+          </div>}
+        </div>}
         {/* Cobertura PS: Substituição por PS + Acionamento */}
         {sh.tipo==="cobertura_ps"&&sh.status==="agendado"&&!isAcionado(sh)&&!sh.substitutoId&&<div style={{marginBottom:8}}>
           {/* --- Substituição → PS --- */}
@@ -378,7 +436,13 @@ export default function App(){
         </div>
         <div style={{...s.row,justifyContent:"space-between",marginBottom:8}}>
           <span style={{fontWeight:500,fontSize:14}}>{new Date(selDate+"T12:00").toLocaleDateString("pt-BR",{weekday:"short",day:"2-digit",month:"short"})} — {todayS.length}</span>
-          {isAdmin&&<button style={s.btn()} onClick={()=>setModal({type:"novoPlantao"})}>+ Novo</button>}
+          <div style={{...s.row,gap:6}}>
+            {isAdmin&&<button style={{...s.out,fontSize:12,padding:"6px 10px"}} onClick={()=>{
+              const nm=calM===11?0:calM+1; const ny=calM===11?calY+1:calY;
+              openHTML(buildEscalaHTML(ny,nm));
+            }}>🖨 Próx. mês</button>}
+            {isAdmin&&<button style={s.btn()} onClick={()=>setModal({type:"novoPlantao"})}>+ Novo</button>}
+          </div>
         </div>
         {todayS.length===0&&<div style={{textAlign:"center",color:"var(--color-text-secondary)",padding:"20px 0",fontSize:13}}>Nenhum plantão</div>}
         {todayS.map(sh=>{
@@ -601,7 +665,7 @@ export default function App(){
       <div>
         {isAdmin&&<>
           <div style={{fontWeight:500,fontSize:15,marginBottom:8}}>Tipos de plantão</div>
-          {stypes.filter(t=>t.id!=="acionamento_ps").map(t=>(
+          {stypes.filter(t=>t.id!=="acionamento_ps"&&t.id!=="meio_periodo").map(t=>(
             <div key={t.id} style={{...s.card,padding:"12px",borderLeft:`3px solid ${t.color}`,marginBottom:8}}>
               {editId===t.id?(
                 <div>
@@ -650,6 +714,34 @@ export default function App(){
                 <div style={{...s.row,gap:16}}>
                   <div><div style={s.lbl}>Bruto</div><div style={{fontWeight:500,color:"#C25E00"}}>R$ {tarAc.bruto.toLocaleString("pt-BR")}</div></div>
                   <div><div style={s.lbl}>Líquido</div><div style={{fontWeight:500,color:"#C25E00"}}>R$ {tarAc.liquido.toLocaleString("pt-BR")}</div></div>
+                </div>
+              </div>
+            );
+          })()}
+          {/* Seção Meio Período */}
+          <div style={{fontWeight:500,fontSize:15,margin:"12px 0 8px"}}>Meio Período</div>
+          {(()=>{
+            const tMp=stypes.find(x=>x.id==="meio_periodo")!;
+            const tarMp=(tarifas as any)["meio_periodo"]||{bruto:0,liquido:0};
+            return editId==="meio_periodo"?(
+              <div style={{...s.card,padding:"12px",borderLeft:`3px solid ${tMp.color}`,marginBottom:8}}>
+                <div style={{marginBottom:8}}><label style={s.lbl}>Nome</label><input style={s.inp} value={ef.label} onChange={e=>setEf(p=>({...p,label:e.target.value}))}/></div>
+                <div style={{...s.row,gap:8,marginBottom:10}}>
+                  <div style={{flex:1}}><label style={s.lbl}>Bruto (R$)</label><input type="number" style={s.inp} value={ef.bruto} onChange={e=>setEf(p=>({...p,bruto:Number(e.target.value)}))}/></div>
+                  <div style={{flex:1}}><label style={s.lbl}>Líquido (R$)</label><input type="number" style={s.inp} value={ef.liquido} onChange={e=>setEf(p=>({...p,liquido:Number(e.target.value)}))}/></div>
+                </div>
+                <div style={{...s.row,gap:6}}><button style={{...s.out,flex:1}} onClick={()=>setEditId(null)}>Cancelar</button><button style={{...s.btn(),flex:1}} onClick={()=>saveEdit("meio_periodo")}>Salvar</button></div>
+              </div>
+            ):(
+              <div style={{...s.card,padding:"12px",borderLeft:`3px solid ${tMp.color}`,marginBottom:8}}>
+                <div style={{...s.row,justifyContent:"space-between",marginBottom:6}}>
+                  <div style={{...s.row,gap:8}}><span style={{width:10,height:10,borderRadius:"50%",background:tMp.color,display:"inline-block"}}/><span style={{fontWeight:500}}>{tMp.label}</span></div>
+                  <button style={{...s.out,fontSize:12,padding:"4px 10px"}} onClick={()=>startEdit(tMp)}>Editar</button>
+                </div>
+                <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:8}}>Horários: 7–13h · 13–19h · 19–1h · 1–7h</div>
+                <div style={{...s.row,gap:16}}>
+                  <div><div style={s.lbl}>Bruto</div><div style={{fontWeight:500,color:tMp.color}}>R$ {tarMp.bruto.toLocaleString("pt-BR")}</div></div>
+                  <div><div style={s.lbl}>Líquido</div><div style={{fontWeight:500,color:tMp.color}}>R$ {tarMp.liquido.toLocaleString("pt-BR")}</div></div>
                 </div>
               </div>
             );
@@ -917,10 +1009,25 @@ export default function App(){
                 </select>
               </div>
               <div style={{marginBottom:10}}><label style={s.lbl}>Data</label><input type="date" style={s.inp} value={nsh.data} onChange={e=>setNsh(p=>({...p,data:e.target.value}))}/></div>
-              <div style={{...s.row,gap:8,marginBottom:10}}>
-                <div style={{flex:1}}><label style={s.lbl}>Início</label><input type="time" style={s.inp} value={nsh.inicio} onChange={e=>setNsh(p=>({...p,inicio:e.target.value}))}/></div>
-                <div style={{flex:1}}><label style={s.lbl}>Fim</label><input type="time" style={s.inp} value={nsh.fim} onChange={e=>setNsh(p=>({...p,fim:e.target.value}))}/></div>
-              </div>
+              {nsh.tipo==="meio_periodo"?(
+                <div style={{marginBottom:10}}>
+                  <label style={s.lbl}>Horário</label>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:4}}>
+                    {MEIO_PERIODO_SLOTS.map(sl=>{
+                      const sel=nsh.inicio===sl.inicio&&nsh.fim===sl.fim;
+                      return(<div key={sl.label} onClick={()=>setNsh(p=>({...p,inicio:sl.inicio,fim:sl.fim}))}
+                        style={{padding:"10px",borderRadius:10,cursor:"pointer",textAlign:"center",border:`1.5px solid ${sel?"#0891B2":"var(--color-border-tertiary)"}`,background:sel?"#E0F7FB":"transparent",color:sel?"#0891B2":"var(--color-text-primary)",fontWeight:sel?500:400,fontSize:13}}>
+                        {sl.label}
+                      </div>);
+                    })}
+                  </div>
+                </div>
+              ):(
+                <div style={{...s.row,gap:8,marginBottom:10}}>
+                  <div style={{flex:1}}><label style={s.lbl}>Início</label><input type="time" style={s.inp} value={nsh.inicio} onChange={e=>setNsh(p=>({...p,inicio:e.target.value}))}/></div>
+                  <div style={{flex:1}}><label style={s.lbl}>Fim</label><input type="time" style={s.inp} value={nsh.fim} onChange={e=>setNsh(p=>({...p,fim:e.target.value}))}/></div>
+                </div>
+              )}
               <div style={{marginBottom:20}}><label style={s.lbl}>Frequência</label>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:4}}>
                   {FREQ_OPTS.map(f=>(<div key={f} onClick={()=>setNsh(p=>({...p,freq:f}))} style={{padding:"10px",borderRadius:10,cursor:"pointer",textAlign:"center",border:`1.5px solid ${nsh.freq===f?"#185FA5":"var(--color-border-tertiary)"}`,background:nsh.freq===f?"#E6F1FB":"transparent",color:nsh.freq===f?"#185FA5":"var(--color-text-primary)",fontWeight:nsh.freq===f?500:400,fontSize:13}}>{f}</div>))}
