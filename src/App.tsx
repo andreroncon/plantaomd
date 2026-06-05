@@ -109,7 +109,7 @@ export default function App(){
 
   function doLogin(){
     if(lf.tipo==="admin"){
-      if(lf.crm==="admin"&&lf.senha==="admin123"){setUser({role:"admin",nome:"Administrador"});setLErr("");}
+      if(lf.crm.toLowerCase()==="admin"&&lf.senha==="admin123"){setUser({role:"admin",nome:"Administrador"});setLErr("");}
       else setLErr("Credenciais inválidas.");
       return;
     }
@@ -249,7 +249,7 @@ export default function App(){
         </div>
         <div style={{marginBottom:10}}>
           <label style={s.lbl}>{lf.tipo==="admin"?"Usuário":"Número do CRM-SP"}</label>
-          <input style={s.inp} placeholder={lf.tipo==="admin"?"admin":"Ex: 112000"} value={lf.crm}
+          <input style={s.inp} placeholder={lf.tipo==="admin"?"":"Ex: 112000"} value={lf.crm}
             onChange={e=>setLf(p=>({...p,crm:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&doLogin()}/>
         </div>
         <div style={{marginBottom:14}}>
