@@ -172,12 +172,12 @@ export default function App(){
     const m=mById(membId); if(!m) return"";
     const{bruto,liquido,list}=calcMes(membId,year,month);
     const rows=list.map(sh=>{ const t=stOf(sh.tipo); const tar=(tarifas as any)[tipoEfetivo(sh)]||{bruto:0,liquido:0}; return`<tr><td>${new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")}</td><td style="color:${t.color}">${t.label}${sh.tipo==="cobertura_ps"&&sh.substitutoId?" → PS":""}</td><td>${sh.inicio}–${sh.fim}</td><td>${mName(sh.membroId)}</td><td>${sh.substitutoId?mName(sh.substitutoId):"—"}</td>${adminView?`<td>R$ ${tar.bruto.toLocaleString("pt-BR")}</td>`:""}<td>R$ ${tar.liquido.toLocaleString("pt-BR")}</td></tr>`; }).join("");
-    return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório ${MONTHS[month]}/${year} – ${m.nome}</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#222}h1{color:#185FA5;font-size:18px}.sub{color:#555;font-size:13px;margin-bottom:16px}.sum{display:flex;gap:20px;margin:16px 0;padding:12px;background:#f0f6ff;border-radius:8px}.sl{font-size:11px;color:#555}.sv{font-size:16px;font-weight:bold;color:#185FA5}table{width:100%;border-collapse:collapse;font-size:11px;margin-top:12px}th{background:#185FA5;color:#fff;padding:7px 5px;text-align:left}td{padding:6px 5px;border-bottom:1px solid #eee}.ft{margin-top:20px;font-size:10px;color:#aaa}</style></head><body><h1>Relatório de Plantões — ${MONTHS[month]} ${year}</h1><div class="sub">${m.nome} · CRM-SP: ${m.crmsp||""} · ${m.esp}</div><div class="sum"><div><div class="sl">Plantões</div><div class="sv">${list.length}</div></div>${adminView?`<div><div class="sl">Bruto</div><div class="sv">R$ ${bruto.toLocaleString("pt-BR")}</div></div>`:""}<div><div class="sl">Líquido</div><div class="sv">R$ ${liquido.toLocaleString("pt-BR")}</div></div></div><table><thead><tr><th>Data</th><th>Tipo</th><th>Horário</th><th>Responsável</th><th>Substituto</th>${adminView?"<th>Bruto</th>":""}<th>Líquido</th></tr></thead><tbody>${rows}</tbody></table><div class="ft">Gerado em ${new Date().toLocaleString("pt-BR")} · PlantãoMed</div></body></html>`;
+    return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório ${MONTHS[month]}/${year} – ${m.nome}</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#222}h1{color:#185FA5;font-size:18px}.sub{color:#555;font-size:13px;margin-bottom:16px}.sum{display:flex;gap:20px;margin:16px 0;padding:12px;background:#f0f6ff;border-radius:8px}.sl{font-size:11px;color:#555}.sv{font-size:16px;font-weight:bold;color:#185FA5}table{width:100%;border-collapse:collapse;font-size:11px;margin-top:12px}th{background:#185FA5;color:#fff;padding:7px 5px;text-align:left}td{padding:6px 5px;border-bottom:1px solid #eee}.ft{margin-top:20px;font-size:10px;color:#aaa}</style></head><body><h1>Relatório de Plantões — ${MONTHS[month]} ${year}</h1><div class="sub">${m.nome} · CRM-SP: ${m.crmsp||""} · ${m.esp}</div><div class="sum"><div><div class="sl">Plantões</div><div class="sv">${list.length}</div></div>${adminView?`<div><div class="sl">Bruto</div><div class="sv">R$ ${bruto.toLocaleString("pt-BR")}</div></div>`:""}<div><div class="sl">Líquido</div><div class="sv">R$ ${liquido.toLocaleString("pt-BR")}</div></div></div><table><thead><tr><th>Data</th><th>Tipo</th><th>Horário</th><th>Responsável</th><th>Substituto</th>${adminView?"<th>Bruto</th>":""}<th>Líquido</th></tr></thead><tbody>${rows}</tbody></table><div class="ft">Gerado em ${new Date().toLocaleString("pt-BR")} · OMNI Gestão de Escala Médica</div></body></html>`;
   }
 
   function buildTeamReportHTML(year: number,month: number){
     const rows=members.map(m=>{ const{list,bruto,liquido}=calcMes(m.id,year,month); if(!list.length) return""; const byTipo:{[k:string]:{label:string,color:string,datas:string[],bruto:number,liquido:number}}={}; list.forEach(sh=>{ const t=stOf(sh.tipo); const tar=(tarifas as any)[sh.tipo]||{bruto:0,liquido:0}; if(!byTipo[sh.tipo]) byTipo[sh.tipo]={label:t.label,color:t.color,datas:[],bruto:0,liquido:0}; byTipo[sh.tipo].datas.push(new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")); byTipo[sh.tipo].bruto+=tar.bruto; byTipo[sh.tipo].liquido+=tar.liquido; }); const tipoRows=Object.values(byTipo).map(v=>`<tr><td style="padding-left:20px;color:${v.color}">${v.label}</td><td style="font-size:10px">${v.datas.join(", ")}</td><td>R$ ${v.bruto.toLocaleString("pt-BR")}</td><td>R$ ${v.liquido.toLocaleString("pt-BR")}</td></tr>`).join(""); return`<tr style="background:#e8f0fe"><td colspan="4" style="padding:8px 6px;font-weight:bold;color:#185FA5">${m.nome} — ${list.length} plantão(ões) · Bruto: R$ ${bruto.toLocaleString("pt-BR")} · Líquido: R$ ${liquido.toLocaleString("pt-BR")}</td></tr>${tipoRows}`; }).filter(Boolean).join("");
-    return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório Equipe ${MONTHS[month]}/${year}</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#222}h1{color:#185FA5;font-size:18px}table{width:100%;border-collapse:collapse;font-size:11px;margin-top:16px}th{background:#185FA5;color:#fff;padding:8px 6px;text-align:left}td{padding:6px;border-bottom:1px solid #eee}.ft{margin-top:20px;font-size:10px;color:#aaa}</style></head><body><h1>Relatório da Equipe — ${MONTHS[month]} ${year}</h1><table><thead><tr><th>Tipo</th><th>Datas</th><th>Bruto</th><th>Líquido</th></tr></thead><tbody>${rows}</tbody></table><div class="ft">Gerado em ${new Date().toLocaleString("pt-BR")} · PlantãoMed</div></body></html>`;
+    return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório Equipe ${MONTHS[month]}/${year}</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#222}h1{color:#185FA5;font-size:18px}table{width:100%;border-collapse:collapse;font-size:11px;margin-top:16px}th{background:#185FA5;color:#fff;padding:8px 6px;text-align:left}td{padding:6px;border-bottom:1px solid #eee}.ft{margin-top:20px;font-size:10px;color:#aaa}</style></head><body><h1>Relatório da Equipe — ${MONTHS[month]} ${year}</h1><table><thead><tr><th>Tipo</th><th>Datas</th><th>Bruto</th><th>Líquido</th></tr></thead><tbody>${rows}</tbody></table><div class="ft">Gerado em ${new Date().toLocaleString("pt-BR")} · OMNI Gestão de Escala Médica</div></body></html>`;
   }
 
   function buildEscalaHTML(year: number, month: number){
@@ -193,7 +193,7 @@ export default function App(){
       const sub=sh.substitutoId&&!isAcionado(sh)?` <span style="font-size:10px;color:#888">(sub.)</span>`:"";
       return `<tr><td style="white-space:nowrap">${dia}</td><td>${m?.nome||"—"}${sub}</td><td>${m?.tel||"—"}</td><td>${m?.crmsp||"—"}</td><td style="color:${color};font-weight:500">${label} ${sh.inicio}–${sh.fim}</td></tr>`;
     }).join("");
-    return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Escala ${MONTHS[month]}/${year}</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#222}h1{color:#185FA5;font-size:17px;margin-bottom:4px}.sub{color:#555;font-size:12px;margin-bottom:16px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#185FA5;color:#fff;padding:8px 7px;text-align:left}td{padding:7px;border-bottom:1px solid #eee}tr:nth-child(even){background:#f8fbff}@media print{body{padding:12px}}.ft{margin-top:18px;font-size:10px;color:#aaa}</style></head><body><h1>Escala de Plantões — ${MONTHS[month]} ${year}</h1><div class="sub">Gerado em ${new Date().toLocaleString("pt-BR")} · PlantãoMed</div><table><thead><tr><th>Dia</th><th>Médico</th><th>Telefone</th><th>CRM-SP</th><th>Plantão / Horário</th></tr></thead><tbody>${rows}</tbody></table><div class="ft">${ms.length} plantão(ões) no mês</div><script>window.onload=()=>window.print();<\/script></body></html>`;
+    return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Escala ${MONTHS[month]}/${year}</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#222}h1{color:#185FA5;font-size:17px;margin-bottom:4px}.sub{color:#555;font-size:12px;margin-bottom:16px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#185FA5;color:#fff;padding:8px 7px;text-align:left}td{padding:7px;border-bottom:1px solid #eee}tr:nth-child(even){background:#f8fbff}@media print{body{padding:12px}}.ft{margin-top:18px;font-size:10px;color:#aaa}</style></head><body><h1>Escala de Plantões — ${MONTHS[month]} ${year}</h1><div class="sub">Gerado em ${new Date().toLocaleString("pt-BR")} · OMNI Gestão de Escala Médica</div><table><thead><tr><th>Dia</th><th>Médico</th><th>Telefone</th><th>CRM-SP</th><th>Plantão / Horário</th></tr></thead><tbody>${rows}</tbody></table><div class="ft">${ms.length} plantão(ões) no mês</div><script>window.onload=()=>window.print();<\/script></body></html>`;
   }
 
   function openHTML(html: string){ const blob=new Blob([html],{type:"text/html;charset=utf-8"}); const url=URL.createObjectURL(blob); const w=window.open(url,"_blank"); if(!w){const a=document.createElement("a");a.href=url;a.download="relatorio.html";document.body.appendChild(a);a.click();a.remove();} setTimeout(()=>URL.revokeObjectURL(url),60000); }
@@ -223,7 +223,7 @@ export default function App(){
   // ── LOADING ───────────────────────────────────────────────────────────────
   if(loading) return(
     <div style={{...s.app,justifyContent:"center",alignItems:"center"}}>
-      <div style={{fontSize:40,marginBottom:12}}>🏥</div>
+      <img src="/icon-192.png" alt="OMNI" style={{width:72,height:72,marginBottom:12}}/>
       <div style={{fontSize:14,color:"var(--color-text-secondary)"}}>Carregando...</div>
     </div>
   );
@@ -232,9 +232,7 @@ export default function App(){
   if(!user) return(
     <div style={{...s.app,justifyContent:"center",alignItems:"center",padding:"0 24px"}}>
       <div style={{textAlign:"center",marginBottom:28}}>
-        <div style={{fontSize:40,marginBottom:6}}>🏥</div>
-        <div style={{fontSize:22,fontWeight:500}}>PlantãoMed</div>
-        <div style={{fontSize:13,color:"var(--color-text-secondary)"}}>Gestão de Escalas Médicas</div>
+        <img src="/logo-omni.png" alt="OMNI — Gestão de Escala Médica" style={{width:"100%",maxWidth:280,height:"auto",margin:"0 auto"}}/>
       </div>
       <div style={{width:"100%",maxWidth:340}}>
         <div style={{...s.row,marginBottom:14,background:"var(--color-background-secondary)",borderRadius:10,padding:4}}>
@@ -1060,9 +1058,14 @@ export default function App(){
   return(
     <div style={s.app}>
       <div style={s.hdr}>
-        <div>
-          <div style={{fontSize:16,fontWeight:500}}>🏥 PlantãoMed</div>
-          <div style={{fontSize:11,opacity:0.8}}>{user.nome} · {isAdmin?"Administrador":"Médico"}</div>
+        <div style={{...s.row,gap:8}}>
+          <div style={{width:32,height:32,borderRadius:8,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <img src="/icon-192.png" alt="OMNI" style={{width:26,height:26}}/>
+          </div>
+          <div>
+            <div style={{fontSize:16,fontWeight:500}}>OMNI</div>
+            <div style={{fontSize:11,opacity:0.8}}>{user.nome} · {isAdmin?"Administrador":"Médico"}</div>
+          </div>
         </div>
         <div style={{...s.row,gap:8}}>
           {tab!=="equipe"&&tab!=="pagamento"&&(
