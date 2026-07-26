@@ -76,14 +76,24 @@ export default function App(){
   const nid = useRef(100);
 
   // ── CARREGAR DADOS DO SUPABASE ─────────────────────────────────────────────
+  // Busca TODAS as linhas paginando de 1000 em 1000 (Supabase limita cada
+  // requisição a 1000 registros; sem isso os plantões mais recentes somem).
+  async function fetchAll(table: string){
+    const PAGE=1000; let from=0; let all: any[]=[];
+    while(true){
+      const { data, error } = await supabase.from(table).select("*").order("id").range(from,from+PAGE-1);
+      if(error||!data) break;
+      all=all.concat(data);
+      if(data.length<PAGE) break;
+      from+=PAGE;
+    }
+    return all;
+  }
   useEffect(()=>{
     async function load(){
-      const [{ data: mData },{ data: sData }] = await Promise.all([
-        supabase.from("members").select("*").order("id"),
-        supabase.from("shifts").select("*").order("id"),
-      ]);
-      if(mData) setMembers(mData);
-      if(sData) setShifts(sData.map(dbToShift));
+      const [mData,sData] = await Promise.all([ fetchAll("members"), fetchAll("shifts") ]);
+      setMembers(mData);
+      setShifts(sData.map(dbToShift));
       setLoading(false);
     }
     load();
