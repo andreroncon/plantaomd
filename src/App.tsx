@@ -540,8 +540,14 @@ export default function App(){
             </div>
           </div>
         );})}
-        <button style={{...s.btn(),width:"100%",marginTop:4}} onClick={()=>gerarRelatorio(selMem,pY,pM,isAdmin)}>📄 Gerar relatório individual</button>
-        {isAdmin&&<button style={{...s.btn("#0F6E56"),width:"100%",marginTop:8}} onClick={()=>gerarRelatorioEquipe(pY,pM)}>📋 Gerar relatório da equipe</button>}
+        <button style={{...s.btn(),width:"100%",marginTop:4}} onClick={()=>{
+          if(!window.confirm(`Tem certeza que deseja gerar o pagamento de ${m?.nome||"—"} referente a ${MONTHS[pM]}/${pY}?`)) return;
+          gerarRelatorio(selMem,pY,pM,isAdmin);
+        }}>📄 Gerar relatório individual</button>
+        {isAdmin&&<button style={{...s.btn("#0F6E56"),width:"100%",marginTop:8}} onClick={()=>{
+          if(!window.confirm(`Tem certeza que deseja gerar o pagamento da equipe referente a ${MONTHS[pM]}/${pY}?`)) return;
+          gerarRelatorioEquipe(pY,pM);
+        }}>📋 Gerar relatório da equipe</button>}
         {myRep.length>0&&<>
           <div style={{fontWeight:500,fontSize:14,margin:"16px 0 8px"}}>Relatórios salvos</div>
           {myRep.map(r=>(
@@ -833,9 +839,20 @@ export default function App(){
           <select style={{...s.inp,marginBottom:8}} value={sr} onChange={e=>setSr(Number(e.target.value))}>
             {sorted.map((m:any)=><option key={m.id} value={m.id}>{m.nome}</option>)}
           </select>
-          {sr!==sh.membroId&&<div style={{...s.row,gap:6,marginBottom:10}}>
-            {isAdmin&&<button style={{...s.btn(),flex:1,fontSize:12}} onClick={()=>{changeResp(sh.id,sr);setModal(null);}}>Salvar definitivo</button>}
-            <button style={{...s.btn("#0F6E56"),flex:1,fontSize:12}} onClick={()=>{setSub(sh.id,sr);setModal(null);}}>Salvar pontual</button>
+          {sr!==sh.membroId&&<div style={{marginBottom:10}}>
+            <div style={{...s.row,gap:6,marginBottom:6}}>
+              {isAdmin&&<button style={{...s.btn(),flex:1,fontSize:12}} onClick={()=>{changeResp(sh.id,sr);setModal(null);}}>Definitivo: só este</button>}
+              <button style={{...s.btn("#0F6E56"),flex:1,fontSize:12}} onClick={()=>{setSub(sh.id,sr);setModal(null);}}>Salvar pontual</button>
+            </div>
+            {isAdmin&&futuros.length>1&&<button style={{...s.btn("#533AB7"),width:"100%",fontSize:12}} onClick={async()=>{
+              if(!window.confirm(`Transferir ESTE e os próximos ${futuros.length-1} plantões agendados (${t.label}) de ${mName(sh.membroId)} para ${mName(sr)}?\n\nPlantões anteriores e já realizados NÃO serão alterados.`)) return;
+              const ids=futuros.map(s=>s.id);
+              const {error}=await supabase.from("shifts").update({membro_id:Number(sr),substituto_id:null}).in("id",ids);
+              if(error){ window.alert("Erro ao transferir. Nada foi alterado."); return; }
+              setShifts(p=>p.map(s=>ids.includes(s.id)?{...s,membroId:Number(sr),substitutoId:null}:s));
+              addNotif(`${mName(sr)} assume os plantões de ${t.label} de ${mName(sh.membroId)} a partir de ${new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")}`,null);
+              setModal(null);
+            }}>Definitivo: este e todos os próximos ({futuros.length})</button>}
           </div>}
           {sub&&<div style={{...s.card,background:t.bg,border:"none",marginBottom:10,padding:"10px 12px"}}>
             <div style={{fontSize:12,color:t.color,marginBottom:2}}>Substituto registrado</div>
