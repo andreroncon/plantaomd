@@ -540,14 +540,8 @@ export default function App(){
             </div>
           </div>
         );})}
-        <button style={{...s.btn(),width:"100%",marginTop:4}} onClick={()=>{
-          if(!window.confirm(`Tem certeza que deseja gerar o pagamento de ${m?.nome||"—"} referente a ${MONTHS[pM]}/${pY}?`)) return;
-          gerarRelatorio(selMem,pY,pM,isAdmin);
-        }}>📄 Gerar relatório individual</button>
-        {isAdmin&&<button style={{...s.btn("#0F6E56"),width:"100%",marginTop:8}} onClick={()=>{
-          if(!window.confirm(`Tem certeza que deseja gerar o pagamento da equipe referente a ${MONTHS[pM]}/${pY}?`)) return;
-          gerarRelatorioEquipe(pY,pM);
-        }}>📋 Gerar relatório da equipe</button>}
+        <button style={{...s.btn(),width:"100%",marginTop:4}} onClick={()=>gerarRelatorio(selMem,pY,pM,isAdmin)}>📄 Gerar relatório individual</button>
+        {isAdmin&&<button style={{...s.btn("#0F6E56"),width:"100%",marginTop:8}} onClick={()=>gerarRelatorioEquipe(pY,pM)}>📋 Gerar relatório da equipe</button>}
         {myRep.length>0&&<>
           <div style={{fontWeight:500,fontSize:14,margin:"16px 0 8px"}}>Relatórios salvos</div>
           {myRep.map(r=>(
