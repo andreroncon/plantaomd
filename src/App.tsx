@@ -89,14 +89,18 @@ export default function App(){
     }
     return all;
   }
+  async function reloadData(){
+    const [mData,sData] = await Promise.all([ fetchAll("members"), fetchAll("shifts") ]);
+    setMembers(mData);
+    setShifts(sData.map(dbToShift));
+  }
   useEffect(()=>{
-    async function load(){
-      const [mData,sData] = await Promise.all([ fetchAll("members"), fetchAll("shifts") ]);
-      setMembers(mData);
-      setShifts(sData.map(dbToShift));
-      setLoading(false);
-    }
+    async function load(){ await reloadData(); setLoading(false); }
     load();
+    // Recarrega ao voltar para o app — outro usuário pode ter alterado dados
+    const onVis=()=>{ if(document.visibilityState==="visible") reloadData(); };
+    document.addEventListener("visibilitychange",onVis);
+    return ()=>document.removeEventListener("visibilitychange",onVis);
   },[]);
 
   const isAdmin = user?.role==="admin";
@@ -355,8 +359,9 @@ export default function App(){
               </select>
               <button style={{...s.btn("#0891B2")}} onClick={async()=>{
                 const toInsert=shiftToDb({membroId:Number(ss2),data:sh.data,inicio:mpSlot.inicio,fim:mpSlot.fim,tipo:"meio_periodo",status:"agendado",checkIn:null,checkOut:null,substitutoId:sh.membroId});
-                const {data}=await supabase.from("shifts").insert(toInsert).select().single();
-                if(data) setShifts(p=>[...p,dbToShift(data)]);
+                const {data,error}=await supabase.from("shifts").insert(toInsert).select().single();
+                if(error||!data){ window.alert("Erro ao salvar a substituição. Tente novamente."); return; }
+                setShifts(p=>[...p,dbToShift(data)]);
                 addNotif(`${mName(Number(ss2))} cobrirá meio período (${mpSlot.label}) de ${mName(sh.membroId)} em ${sh.data}`,null);
                 setEsmp(false);
               }}>OK</button>
@@ -790,9 +795,6 @@ export default function App(){
 
     async function aplicarNovaFreq(){
       if(!window.confirm(`Alterar frequência para "${novaFreq}" a partir de ${new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")}?`)) return;
-      // Exclui todos os agendados futuros do mesmo médico+tipo a partir desta data
-      const ids=futuros.map(s=>s.id);
-      if(ids.length) await supabase.from("shifts").delete().in("id",ids);
       // Gera novos plantões com a nova frequência
       const toAdd: any[]=[];
       const base={membro_id:sh.membroId,inicio:sh.inicio,fim:sh.fim,tipo:sh.tipo,status:"agendado",check_in:null,check_out:null,substituto_id:null};
@@ -800,8 +802,15 @@ export default function App(){
       else if(novaFreq==="Semanal")    for(let i=0;i<53;i++){const d=new Date(sh.data+"T12:00:00");d.setDate(d.getDate()+7*i);toAdd.push({...base,data:localDateStr(d)});}
       else if(novaFreq==="Quinzenal")  for(let i=0;i<27;i++){const d=new Date(sh.data+"T12:00:00");d.setDate(d.getDate()+14*i);toAdd.push({...base,data:localDateStr(d)});}
       else if(novaFreq==="Mensal")     for(let i=0;i<12;i++){const d=new Date(sh.data+"T12:00:00");d.setMonth(d.getMonth()+i);toAdd.push({...base,data:localDateStr(d)});}
-      const {data}=await supabase.from("shifts").insert(toAdd).select();
-      setShifts(p=>[...p.filter(s=>!ids.includes(s.id)),...(data||[]).map(dbToShift)]);
+      // 1º insere a nova série; só depois apaga a antiga (se falhar, nada é perdido)
+      const {data,error}=await supabase.from("shifts").insert(toAdd).select();
+      if(error||!data){ window.alert("Erro ao criar a nova série. Nada foi alterado."); return; }
+      const ids=futuros.map(s=>s.id);
+      if(ids.length){
+        const {error:delErr}=await supabase.from("shifts").delete().in("id",ids);
+        if(delErr) window.alert("Nova série criada, mas houve erro ao remover a antiga — podem existir plantões duplicados.");
+      }
+      setShifts(p=>[...p.filter(s=>!ids.includes(s.id)),...data.map(dbToShift)]);
       setModal(null);
     }
 
@@ -903,21 +912,27 @@ export default function App(){
       }
     }
     async function applyPeri(tipoId: string,sem: number){
+      if(!window.confirm(`Refazer os plantões futuros de ${m.nome} (${stOf(tipoId).label}) para a cada ${sem} semana(s)? Os agendados a partir de hoje serão substituídos.`)) return;
+      const base=shifts.find(s=>s.membroId===membId&&s.tipo===tipoId);
+      if(!base){ window.alert("Nenhum plantão deste tipo encontrado para usar como modelo. Nada foi alterado."); return; }
       const newPeri={...(m.periodicidades||{}),[tipoId]:sem};
       await supabase.from("members").update({periodicidades:newPeri}).eq("id",membId);
       setMembers(p=>p.map((x:any)=>x.id===membId?{...x,periodicidades:newPeri}:x));
       const hoje=new Date(); hoje.setHours(12,0,0,0);
       const toDelete=shifts.filter(s=>s.membroId===membId&&s.tipo===tipoId&&s.status==="agendado"&&new Date(s.data+"T12:00")>=hoje);
-      if(toDelete.length) await supabase.from("shifts").delete().in("id",toDelete.map(s=>s.id));
-      const base=shifts.find(s=>s.membroId===membId&&s.tipo===tipoId);
-      if(base){
-        const novas: any[]=[]; const dow=new Date(base.data+"T12:00").getDay();
-        const d0=new Date(hoje); while(d0.getDay()!==dow) d0.setDate(d0.getDate()+1);
-        let d=new Date(d0); const fim=new Date(); fim.setFullYear(fim.getFullYear()+1);
-        while(d<=fim){ novas.push({membro_id:membId,data:localDateStr(d),inicio:base.inicio,fim:base.fim,tipo:tipoId,status:"agendado",check_in:null,check_out:null,substituto_id:null}); d=new Date(d); d.setDate(d.getDate()+sem*7); }
-        const {data}=await supabase.from("shifts").insert(novas).select();
-        setShifts(prev=>{ const filt=prev.filter(s=>!(s.membroId===membId&&s.tipo===tipoId&&s.status==="agendado"&&new Date(s.data+"T12:00")>=hoje)); return [...filt,...(data||[]).map(dbToShift)]; });
+      const novas: any[]=[]; const dow=new Date(base.data+"T12:00").getDay();
+      const d0=new Date(hoje); while(d0.getDay()!==dow) d0.setDate(d0.getDate()+1);
+      let d=new Date(d0); const fim=new Date(); fim.setFullYear(fim.getFullYear()+1);
+      while(d<=fim){ novas.push({membro_id:membId,data:localDateStr(d),inicio:base.inicio,fim:base.fim,tipo:tipoId,status:"agendado",check_in:null,check_out:null,substituto_id:null}); d=new Date(d); d.setDate(d.getDate()+sem*7); }
+      // 1º insere a nova série; só depois apaga a antiga (se falhar, nada é perdido)
+      const {data,error}=await supabase.from("shifts").insert(novas).select();
+      if(error||!data){ window.alert("Erro ao criar a nova série. Nada foi alterado."); return; }
+      const delIds=toDelete.map(s=>s.id).filter(id=>!data.some((n:any)=>n.id===id));
+      if(delIds.length){
+        const {error:delErr}=await supabase.from("shifts").delete().in("id",delIds);
+        if(delErr) window.alert("Nova série criada, mas houve erro ao remover a antiga — podem existir plantões duplicados.");
       }
+      setShifts(prev=>{ const filt=prev.filter(s=>!delIds.includes(s.id)); return [...filt,...data.map(dbToShift)]; });
       addNotif(`Periodicidade de ${m.nome} em ${stOf(tipoId).label}: a cada ${sem} sem.`,null);
     }
     const fields=[["nome","Nome completo","text"],["crmsp","CRM-SP (login)","text"],["esp","Especialidade","text"],["tel","Telefone","tel"],["email","E-mail","email"],["senha","Senha","password"]];
@@ -984,8 +999,9 @@ export default function App(){
       else if(nsh.freq==="Quinzenal") for(let i=1;i<27;i++){const d=new Date(nsh.data+"T12:00:00");d.setDate(d.getDate()+14*i);toAdd.push({...base,data:localDateStr(d)});}
       else if(nsh.freq==="Mensal") for(let i=1;i<12;i++){const d=new Date(nsh.data+"T12:00:00");d.setMonth(d.getMonth()+i);toAdd.push({...base,data:localDateStr(d)});}
       const toInsert=toAdd.map(s=>shiftToDb({...s,status:"agendado",checkIn:null,checkOut:null,substitutoId:null}));
-      const {data}=await supabase.from("shifts").insert(toInsert).select();
-      if(data) setShifts(p=>[...p,...data.map(dbToShift)]);
+      const {data,error}=await supabase.from("shifts").insert(toInsert).select();
+      if(error||!data){ window.alert("Erro ao salvar o plantão. Verifique a conexão e tente novamente."); return; }
+      setShifts(p=>[...p,...data.map(dbToShift)]);
       addNotif(`Plantão adicionado para ${mName(Number(nsh.membroId))}`,null); setModal(null);
     }
     return(
