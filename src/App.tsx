@@ -192,12 +192,11 @@ export default function App(){
     }catch{ setLErr("Biometria não reconhecida. Entre com CRM e senha."); }
   }
 
-  // Tipo efetivo para faturamento
+  // Tipo efetivo para faturamento: substituição NUNCA muda o valor — paga a
+  // tarifa do próprio tipo (aba Config). Única exceção: cobertura acionada
+  // vira Acionamento PS (paga somente o valor de acionamento, sem somar os dois).
   function tipoEfetivo(s: any){
-    if(s.tipo==="cobertura_ps"){
-      if(isAcionado(s))   return "acionamento_ps";
-      if(s.substitutoId)  return "plantao_ps";
-    }
+    if(s.tipo==="cobertura_ps"&&isAcionado(s)) return "acionamento_ps";
     return s.tipo;
   }
 
@@ -221,12 +220,12 @@ export default function App(){
   function buildReportHTML(membId: number,year: number,month: number,adminView: boolean){
     const m=mById(membId); if(!m) return"";
     const{bruto,liquido,list}=calcMes(membId,year,month);
-    const rows=list.map(sh=>{ const t=stOf(sh.tipo); const tar=(tarifas as any)[tipoEfetivo(sh)]||{bruto:0,liquido:0}; return`<tr><td>${new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")}</td><td style="color:${t.color}">${t.label}${sh.tipo==="cobertura_ps"&&sh.substitutoId?" → PS":""}</td><td>${sh.inicio}–${sh.fim}</td><td>${mName(sh.membroId)}</td><td>${sh.substitutoId?mName(sh.substitutoId):"—"}</td>${adminView?`<td>R$ ${tar.bruto.toLocaleString("pt-BR")}</td>`:""}<td>R$ ${tar.liquido.toLocaleString("pt-BR")}</td></tr>`; }).join("");
+    const rows=list.map(sh=>{ const t=stOf(tipoEfetivo(sh)); const tar=(tarifas as any)[tipoEfetivo(sh)]||{bruto:0,liquido:0}; return`<tr><td>${new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")}</td><td style="color:${t.color}">${t.label}</td><td>${sh.inicio}–${sh.fim}</td><td>${mName(sh.membroId)}</td><td>${sh.substitutoId?mName(sh.substitutoId):"—"}</td>${adminView?`<td>R$ ${tar.bruto.toLocaleString("pt-BR")}</td>`:""}<td>R$ ${tar.liquido.toLocaleString("pt-BR")}</td></tr>`; }).join("");
     return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório ${MONTHS[month]}/${year} – ${m.nome}</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#222}h1{color:#185FA5;font-size:18px}.sub{color:#555;font-size:13px;margin-bottom:16px}.sum{display:flex;gap:20px;margin:16px 0;padding:12px;background:#f0f6ff;border-radius:8px}.sl{font-size:11px;color:#555}.sv{font-size:16px;font-weight:bold;color:#185FA5}table{width:100%;border-collapse:collapse;font-size:11px;margin-top:12px}th{background:#185FA5;color:#fff;padding:7px 5px;text-align:left}td{padding:6px 5px;border-bottom:1px solid #eee}.ft{margin-top:20px;font-size:10px;color:#aaa}</style></head><body><h1>Relatório de Plantões — ${MONTHS[month]} ${year}</h1><div class="sub">${m.nome} · CRM-SP: ${m.crmsp||""} · ${m.esp}</div><div class="sum"><div><div class="sl">Plantões</div><div class="sv">${list.length}</div></div>${adminView?`<div><div class="sl">Bruto</div><div class="sv">R$ ${bruto.toLocaleString("pt-BR")}</div></div>`:""}<div><div class="sl">Líquido</div><div class="sv">R$ ${liquido.toLocaleString("pt-BR")}</div></div></div><table><thead><tr><th>Data</th><th>Tipo</th><th>Horário</th><th>Responsável</th><th>Substituto</th>${adminView?"<th>Bruto</th>":""}<th>Líquido</th></tr></thead><tbody>${rows}</tbody></table><div class="ft">Gerado em ${new Date().toLocaleString("pt-BR")} · OMNI Gestão de Escala Médica</div></body></html>`;
   }
 
   function buildTeamReportHTML(year: number,month: number){
-    const rows=members.filter(m=>!isVagoM(m.id)).map(m=>{ const{list,bruto,liquido}=calcMes(m.id,year,month); if(!list.length) return""; const byTipo:{[k:string]:{label:string,color:string,datas:string[],bruto:number,liquido:number}}={}; list.forEach(sh=>{ const t=stOf(sh.tipo); const tar=(tarifas as any)[sh.tipo]||{bruto:0,liquido:0}; if(!byTipo[sh.tipo]) byTipo[sh.tipo]={label:t.label,color:t.color,datas:[],bruto:0,liquido:0}; byTipo[sh.tipo].datas.push(new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")); byTipo[sh.tipo].bruto+=tar.bruto; byTipo[sh.tipo].liquido+=tar.liquido; }); const tipoRows=Object.values(byTipo).map(v=>`<tr><td style="padding-left:20px;color:${v.color}">${v.label}</td><td style="font-size:10px">${v.datas.join(", ")}</td><td>R$ ${v.bruto.toLocaleString("pt-BR")}</td><td>R$ ${v.liquido.toLocaleString("pt-BR")}</td></tr>`).join(""); return`<tr style="background:#e8f0fe"><td colspan="4" style="padding:8px 6px;font-weight:bold;color:#185FA5">${m.nome} — ${list.length} plantão(ões) · Bruto: R$ ${bruto.toLocaleString("pt-BR")} · Líquido: R$ ${liquido.toLocaleString("pt-BR")}</td></tr>${tipoRows}`; }).filter(Boolean).join("");
+    const rows=members.filter(m=>!isVagoM(m.id)).map(m=>{ const{list,bruto,liquido}=calcMes(m.id,year,month); if(!list.length) return""; const byTipo:{[k:string]:{label:string,color:string,datas:string[],bruto:number,liquido:number}}={}; list.forEach(sh=>{ const te=tipoEfetivo(sh); const t=stOf(te); const tar=(tarifas as any)[te]||{bruto:0,liquido:0}; if(!byTipo[te]) byTipo[te]={label:t.label,color:t.color,datas:[],bruto:0,liquido:0}; byTipo[te].datas.push(new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")); byTipo[te].bruto+=tar.bruto; byTipo[te].liquido+=tar.liquido; }); const tipoRows=Object.values(byTipo).map(v=>`<tr><td style="padding-left:20px;color:${v.color}">${v.label}</td><td style="font-size:10px">${v.datas.join(", ")}</td><td>R$ ${v.bruto.toLocaleString("pt-BR")}</td><td>R$ ${v.liquido.toLocaleString("pt-BR")}</td></tr>`).join(""); return`<tr style="background:#e8f0fe"><td colspan="4" style="padding:8px 6px;font-weight:bold;color:#185FA5">${m.nome} — ${list.length} plantão(ões) · Bruto: R$ ${bruto.toLocaleString("pt-BR")} · Líquido: R$ ${liquido.toLocaleString("pt-BR")}</td></tr>${tipoRows}`; }).filter(Boolean).join("");
     return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório Equipe ${MONTHS[month]}/${year}</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#222}h1{color:#185FA5;font-size:18px}table{width:100%;border-collapse:collapse;font-size:11px;margin-top:16px}th{background:#185FA5;color:#fff;padding:8px 6px;text-align:left}td{padding:6px;border-bottom:1px solid #eee}.ft{margin-top:20px;font-size:10px;color:#aaa}</style></head><body><h1>Relatório da Equipe — ${MONTHS[month]} ${year}</h1><table><thead><tr><th>Tipo</th><th>Datas</th><th>Bruto</th><th>Líquido</th></tr></thead><tbody>${rows}</tbody></table><div class="ft">Gerado em ${new Date().toLocaleString("pt-BR")} · OMNI Gestão de Escala Médica</div></body></html>`;
   }
 
@@ -435,7 +434,7 @@ export default function App(){
           </div>
         </div>}
         {sh.tipo==="cobertura_ps"&&sh.substitutoId&&<div style={{...s.row,justifyContent:"space-between",marginBottom:8,padding:"8px 10px",borderRadius:8,background:"#E6F1FB"}}>
-          <span style={{fontSize:12,color:"#185FA5"}}>💡 Sub. por PS: <b>{mName(sh.substitutoId)}</b></span>
+          <span style={{fontSize:12,color:"#185FA5"}}>💡 Substituto: <b>{mName(sh.substitutoId)}</b></span>
           {(isAdmin||myId===sh.membroId)&&<button style={{...s.out,fontSize:11,padding:"3px 8px",color:"#A32D2D"}} onClick={()=>cancelSub(sh.id)}>Cancelar</button>}
         </div>}
         {sh.tipo==="cobertura_ps"&&isAcionado(sh)&&<div style={{...s.row,justifyContent:"space-between",marginBottom:8,padding:"8px 10px",borderRadius:8,background:"#FDF0E6"}}>
@@ -470,7 +469,7 @@ export default function App(){
       const acionado=isAcionado(sh); const tAc=stOf("acionamento_ps");
       const vago=shiftVago(sh);
       const displayT=vago?{color:"#D62828",bg:"#FDECEC"}:acionado?tAc:t;
-      const displayLabel=vago?"VAGO":acionado?"Acionado":sh.substitutoId&&sh.tipo==="cobertura_ps"?"Sub. PS":t.label;
+      const displayLabel=vago?"VAGO":acionado?"Acionado":t.label;
       return(
         <div style={{...s.card,borderLeft:`3px solid ${displayT.color}`,display:"flex",alignItems:"center",gap:10,marginBottom:8,...(vago?{background:"#FDECEC",border:"1px solid #D62828",borderLeft:"3px solid #D62828"}:{})}}>
           <div style={{flex:1,cursor:"pointer"}} onClick={()=>{setSelDate(sh.data);setTab("checkin");}}>
@@ -576,7 +575,7 @@ export default function App(){
     const m=mById(selMem);
     const{bruto,liquido,list}=m?calcMes(selMem,pY,pM):{bruto:0,liquido:0,list:[]};
     const byTipo: any={};
-    list.forEach(sh=>{ if(!byTipo[sh.tipo]) byTipo[sh.tipo]={count:0,bruto:0,liquido:0}; const tar=(tarifas as any)[sh.tipo]||{bruto:0,liquido:0}; byTipo[sh.tipo].count++; byTipo[sh.tipo].bruto+=tar.bruto; byTipo[sh.tipo].liquido+=tar.liquido; });
+    list.forEach(sh=>{ const te=tipoEfetivo(sh); if(!byTipo[te]) byTipo[te]={count:0,bruto:0,liquido:0}; const tar=(tarifas as any)[te]||{bruto:0,liquido:0}; byTipo[te].count++; byTipo[te].bruto+=tar.bruto; byTipo[te].liquido+=tar.liquido; });
     const sorted=[...pagaveis].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
     const myRep=savedReports.filter(r=>isAdmin||r.membId===myId);
     return(
