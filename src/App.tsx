@@ -400,7 +400,8 @@ export default function App(){
                   .map((m:any)=><option key={m.id} value={m.id}>{m.nome}</option>)}
               </select>
               <button style={{...s.btn("#0891B2")}} onClick={async()=>{
-                const toInsert=shiftToDb({membroId:Number(ss2),data:sh.data,inicio:mpSlot.inicio,fim:mpSlot.fim,tipo:"meio_periodo",status:"agendado",checkIn:null,checkOut:null,substitutoId:sh.membroId});
+                // substitutoId null: o pagamento do meio período é de quem o trabalha (membroId)
+                const toInsert=shiftToDb({membroId:Number(ss2),data:sh.data,inicio:mpSlot.inicio,fim:mpSlot.fim,tipo:"meio_periodo",status:"agendado",checkIn:null,checkOut:null,substitutoId:null});
                 const {data,error}=await supabase.from("shifts").insert(toInsert).select().single();
                 if(error||!data){ window.alert("Erro ao salvar a substituição. Tente novamente."); return; }
                 setShifts(p=>[...p,dbToShift(data)]);
