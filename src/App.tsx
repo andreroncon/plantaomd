@@ -156,6 +156,42 @@ export default function App(){
   const isAcionado  = (s: any) => typeof s.checkIn==="string"&&s.checkIn.startsWith("acionado:");
   const acionadoId  = (s: any) => isAcionado(s)?parseInt(s.checkIn.split(":")[1]):null;
 
+  // "VAGO" = plantão em aberto, sem médico definido
+  const isVagoM   = (id: number) => (mById(id)?.nome||"").trim().toLowerCase()==="vago";
+  const shiftVago = (s: any) => !isAcionado(s)&&isVagoM(s.substitutoId||s.membroId);
+
+  // ── LOGIN COM BIOMETRIA (WebAuthn) ────────────────────────────────────────
+  function bioSaved(){ try{ return JSON.parse(localStorage.getItem("omni_bio")||"null"); }catch{ return null; } }
+  async function bioRegister(){
+    if(!window.PublicKeyCredential){ window.alert("Este aparelho/navegador não suporta biometria."); return; }
+    try{
+      const cred: any = await navigator.credentials.create({publicKey:{
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        rp:{name:"OMNI"},
+        user:{id:new TextEncoder().encode(String(myId||"admin")),name:user.nome,displayName:user.nome},
+        pubKeyCredParams:[{type:"public-key",alg:-7},{type:"public-key",alg:-257}],
+        authenticatorSelection:{authenticatorAttachment:"platform",userVerification:"required"},
+        timeout:60000,
+      }});
+      localStorage.setItem("omni_bio",JSON.stringify({credId:Array.from(new Uint8Array(cred.rawId)),memberId:myId||null,role:user.role,nome:user.nome}));
+      window.alert("Biometria ativada! No próximo acesso use o botão \"Entrar com biometria\".");
+    }catch{ window.alert("Não foi possível ativar a biometria."); }
+  }
+  async function bioLogin(){
+    const info=bioSaved(); if(!info) return;
+    try{
+      await navigator.credentials.get({publicKey:{
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        allowCredentials:[{type:"public-key",id:new Uint8Array(info.credId)}],
+        userVerification:"required", timeout:60000,
+      }});
+      if(info.role==="admin"){ setUser({role:"admin",nome:"Administrador"}); setLErr(""); return; }
+      const m=members.find((x:any)=>x.id===info.memberId&&x.ativo);
+      if(m){ setUser({role:"medico",memberId:m.id,nome:m.nome}); setLErr(""); }
+      else setLErr("Cadastro não encontrado ou bloqueado. Entre com CRM e senha.");
+    }catch{ setLErr("Biometria não reconhecida. Entre com CRM e senha."); }
+  }
+
   // Tipo efetivo para faturamento
   function tipoEfetivo(s: any){
     if(s.tipo==="cobertura_ps"){
@@ -190,7 +226,7 @@ export default function App(){
   }
 
   function buildTeamReportHTML(year: number,month: number){
-    const rows=members.map(m=>{ const{list,bruto,liquido}=calcMes(m.id,year,month); if(!list.length) return""; const byTipo:{[k:string]:{label:string,color:string,datas:string[],bruto:number,liquido:number}}={}; list.forEach(sh=>{ const t=stOf(sh.tipo); const tar=(tarifas as any)[sh.tipo]||{bruto:0,liquido:0}; if(!byTipo[sh.tipo]) byTipo[sh.tipo]={label:t.label,color:t.color,datas:[],bruto:0,liquido:0}; byTipo[sh.tipo].datas.push(new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")); byTipo[sh.tipo].bruto+=tar.bruto; byTipo[sh.tipo].liquido+=tar.liquido; }); const tipoRows=Object.values(byTipo).map(v=>`<tr><td style="padding-left:20px;color:${v.color}">${v.label}</td><td style="font-size:10px">${v.datas.join(", ")}</td><td>R$ ${v.bruto.toLocaleString("pt-BR")}</td><td>R$ ${v.liquido.toLocaleString("pt-BR")}</td></tr>`).join(""); return`<tr style="background:#e8f0fe"><td colspan="4" style="padding:8px 6px;font-weight:bold;color:#185FA5">${m.nome} — ${list.length} plantão(ões) · Bruto: R$ ${bruto.toLocaleString("pt-BR")} · Líquido: R$ ${liquido.toLocaleString("pt-BR")}</td></tr>${tipoRows}`; }).filter(Boolean).join("");
+    const rows=members.filter(m=>!isVagoM(m.id)).map(m=>{ const{list,bruto,liquido}=calcMes(m.id,year,month); if(!list.length) return""; const byTipo:{[k:string]:{label:string,color:string,datas:string[],bruto:number,liquido:number}}={}; list.forEach(sh=>{ const t=stOf(sh.tipo); const tar=(tarifas as any)[sh.tipo]||{bruto:0,liquido:0}; if(!byTipo[sh.tipo]) byTipo[sh.tipo]={label:t.label,color:t.color,datas:[],bruto:0,liquido:0}; byTipo[sh.tipo].datas.push(new Date(sh.data+"T12:00").toLocaleDateString("pt-BR")); byTipo[sh.tipo].bruto+=tar.bruto; byTipo[sh.tipo].liquido+=tar.liquido; }); const tipoRows=Object.values(byTipo).map(v=>`<tr><td style="padding-left:20px;color:${v.color}">${v.label}</td><td style="font-size:10px">${v.datas.join(", ")}</td><td>R$ ${v.bruto.toLocaleString("pt-BR")}</td><td>R$ ${v.liquido.toLocaleString("pt-BR")}</td></tr>`).join(""); return`<tr style="background:#e8f0fe"><td colspan="4" style="padding:8px 6px;font-weight:bold;color:#185FA5">${m.nome} — ${list.length} plantão(ões) · Bruto: R$ ${bruto.toLocaleString("pt-BR")} · Líquido: R$ ${liquido.toLocaleString("pt-BR")}</td></tr>${tipoRows}`; }).filter(Boolean).join("");
     return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório Equipe ${MONTHS[month]}/${year}</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#222}h1{color:#185FA5;font-size:18px}table{width:100%;border-collapse:collapse;font-size:11px;margin-top:16px}th{background:#185FA5;color:#fff;padding:8px 6px;text-align:left}td{padding:6px;border-bottom:1px solid #eee}.ft{margin-top:20px;font-size:10px;color:#aaa}</style></head><body><h1>Relatório da Equipe — ${MONTHS[month]} ${year}</h1><table><thead><tr><th>Tipo</th><th>Datas</th><th>Bruto</th><th>Líquido</th></tr></thead><tbody>${rows}</tbody></table><div class="ft">Gerado em ${new Date().toLocaleString("pt-BR")} · OMNI Gestão de Escala Médica</div></body></html>`;
   }
 
@@ -271,6 +307,7 @@ export default function App(){
         </div>
         {lErr&&<div style={{color:"#A32D2D",fontSize:12,marginBottom:10,textAlign:"center"}}>{lErr}</div>}
         <button style={{...s.btn(),width:"100%",padding:"11px"}} onClick={doLogin}>Entrar</button>
+        {bioSaved()&&<button style={{...s.out,width:"100%",padding:"11px",marginTop:10,fontSize:14}} onClick={bioLogin}>🔒 Entrar com biometria ({bioSaved().nome})</button>}
       </div>
     </div>
   );
@@ -279,9 +316,8 @@ export default function App(){
     {id:"escala",   icon:"📅",label:"Escala"},
     {id:"checkin",  icon:"⏱️",label:"Check-in"},
     {id:"pagamento",icon:"💰",label:"Pagamento"},
-    {id:"relatorio",icon:"📊",label:"Relatório"},
     {id:"equipe",   icon:"👥",label:"Equipe"},
-    ...(isAdmin?[{id:"config",icon:"⚙️",label:"Config"}]:[]),
+    {id:"config",   icon:"⚙️",label:"Config"},
   ];
 
   const myNotifs=notifs.filter((n:any)=>isAdmin||n.membId===myId||n.membId===null);
@@ -294,16 +330,23 @@ export default function App(){
     const [ss2,setSs2]=useState(members.find((m:any)=>m.id!==sh.membroId)?.id||1);
     const [mpSlot,setMpSlot]=useState(MEIO_PERIODO_SLOTS[0]);
     const sorted=[...members].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
+    const vago=shiftVago(sh);
     return(
-      <div style={{...s.card,borderLeft:`3px solid ${t.color}`}}>
+      <div style={{...s.card,borderLeft:`3px solid ${vago?"#D62828":t.color}`,...(vago?{background:"#FDECEC",border:"1px solid #D62828",borderLeft:"3px solid #D62828"}:{})}}>
         <div style={{...s.row,justifyContent:"space-between",marginBottom:3}}>
-          <span style={s.bdg(t.color,t.bg)}>{t.label}</span>
-          <span style={s.bdg(stColor[sh.status])}>{stLabel[sh.status]}</span>
+          <div style={{...s.row,gap:6}}>
+            {vago&&<span style={s.bdg("#D62828","#FBD5D5")}>VAGO</span>}
+            <span style={s.bdg(t.color,t.bg)}>{t.label}</span>
+          </div>
+          <div style={{...s.row,gap:6}}>
+            <span style={s.bdg(stColor[sh.status])}>{stLabel[sh.status]}</span>
+            {isAdmin&&<button style={{...s.out,fontSize:11,padding:"3px 8px"}} onClick={()=>setModal({type:"editShift",shiftId:sh.id})}>⚙</button>}
+          </div>
         </div>
         <div style={{fontSize:13,fontWeight:500}}>{sh.inicio}–{sh.fim}</div>
-        <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:2}}>
-          <b style={{color:"var(--color-text-primary)"}}>Resp.:</b> {mName(sh.membroId)}
-          {sub&&<span style={{color:t.color}}> · Sub.: {(sub as any).nome}</span>}
+        <div style={{fontSize:12,color:vago?"#D62828":"var(--color-text-secondary)",marginTop:2}}>
+          <b style={{color:vago?"#D62828":"var(--color-text-primary)"}}>Resp.:</b> {vago?"Plantão em aberto":mName(sh.membroId)}
+          {sub&&!vago&&<span style={{color:t.color}}> · Sub.: {(sub as any).nome}</span>}
         </div>
         <div style={s.sep}/>
         {isAdmin&&<div style={{marginBottom:8}}>
@@ -416,9 +459,36 @@ export default function App(){
 
   // ── ESCALA ────────────────────────────────────────────────────────────────
   function EscalaView(){
+    const [vw,setVw]=useState("dia");
     const days=getDIM(calY,calM), first=getFD(calY,calM);
     const cells=[...Array(first).fill(null),...Array.from({length:days},(_,i)=>i+1)];
     const todayS=shifts.filter(s=>s.data===selDate);
+    const wkStart=new Date(selDate+"T12:00"); wkStart.setDate(wkStart.getDate()-wkStart.getDay());
+    const weekDays=Array.from({length:7},(_,i)=>{const d=new Date(wkStart); d.setDate(d.getDate()+i); return localDateStr(d);});
+    function ShiftRow({sh}: any){
+      const t=stOf(sh.tipo); const sub=sh.substitutoId?mById(sh.substitutoId):null;
+      const acionado=isAcionado(sh); const tAc=stOf("acionamento_ps");
+      const vago=shiftVago(sh);
+      const displayT=vago?{color:"#D62828",bg:"#FDECEC"}:acionado?tAc:t;
+      const displayLabel=vago?"VAGO":acionado?"Acionado":sh.substitutoId&&sh.tipo==="cobertura_ps"?"Sub. PS":t.label;
+      return(
+        <div style={{...s.card,borderLeft:`3px solid ${displayT.color}`,display:"flex",alignItems:"center",gap:10,marginBottom:8,...(vago?{background:"#FDECEC",border:"1px solid #D62828",borderLeft:"3px solid #D62828"}:{})}}>
+          <div style={{flex:1,cursor:"pointer"}} onClick={()=>{setSelDate(sh.data);setTab("checkin");}}>
+            <div style={{...s.row,gap:6,marginBottom:3}}>
+              <span style={s.bdg(displayT.color,displayT.bg)}>{displayLabel}</span>
+              {vago&&<span style={s.bdg(t.color,t.bg)}>{t.label}</span>}
+              <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>{sh.inicio}–{sh.fim}</span>
+            </div>
+            <div style={{fontSize:13,fontWeight:500,color:vago?"#D62828":undefined}}>{vago?"Plantão em aberto":acionado?mName(acionadoId(sh)!):mName(sh.membroId)}</div>
+            {sub&&!acionado&&!vago&&<div style={{fontSize:12,color:t.color}}>Sub.: {(sub as any).nome}</div>}
+          </div>
+          {isAdmin
+            ? <button style={{...s.out,color:"#A32D2D",fontSize:13,padding:"6px 10px",flexShrink:0}} onClick={e=>{e.stopPropagation();delShift(sh.id);}}>✕</button>
+            : <span style={{color:"var(--color-text-secondary)",fontSize:18}}>›</span>
+          }
+        </div>
+      );
+    }
     return(
       <div>
         <div style={{...s.row,justifyContent:"space-between",marginBottom:10}}>
@@ -448,32 +518,30 @@ export default function App(){
           {stypes.map(t=><span key={t.id} style={{...s.bdg(t.color,t.bg),fontSize:10,display:"flex",alignItems:"center",gap:3}}><span style={{width:5,height:5,borderRadius:"50%",background:t.color,display:"inline-block"}}/>{t.label}</span>)}
         </div>
         <div style={{...s.row,justifyContent:"space-between",marginBottom:8}}>
-          <span style={{fontWeight:500,fontSize:14}}>{new Date(selDate+"T12:00").toLocaleDateString("pt-BR",{weekday:"short",day:"2-digit",month:"short"})} — {todayS.length}</span>
-          <div style={{...s.row,gap:6}}>
-            {isAdmin&&<button style={{...s.out,fontSize:12,padding:"6px 10px"}} onClick={()=>{
-              const nm=calM===11?0:calM+1; const ny=calM===11?calY+1:calY;
-              openHTML(buildEscalaHTML(ny,nm));
-            }}>🖨 Próx. mês</button>}
-            {isAdmin&&<button style={s.btn()} onClick={()=>setModal({type:"novoPlantao"})}>+ Novo</button>}
+          <div style={{...s.row,gap:4,background:"var(--color-background-secondary)",borderRadius:8,padding:3}}>
+            {[["dia","Dia"],["semana","Semana"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setVw(v)} style={{padding:"5px 14px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:500,
+                background:vw===v?"var(--color-background-primary)":"transparent",color:vw===v?"#185FA5":"var(--color-text-secondary)"}}>{l}</button>
+            ))}
           </div>
+          {isAdmin&&<button style={s.btn()} onClick={()=>setModal({type:"novoPlantao"})}>+ Novo</button>}
         </div>
-        {todayS.length===0&&<div style={{textAlign:"center",color:"var(--color-text-secondary)",padding:"20px 0",fontSize:13}}>Nenhum plantão</div>}
-        {todayS.map(sh=>{
-          const t=stOf(sh.tipo); const sub=sh.substitutoId?mById(sh.substitutoId):null;
-          const acionado=isAcionado(sh); const tAc=stOf("acionamento_ps");
-          const displayT=acionado?tAc:t;
-          const displayLabel=acionado?"Acionado":sh.substitutoId&&sh.tipo==="cobertura_ps"?"Sub. PS":t.label;
+        {vw==="dia"&&<>
+          <div style={{fontWeight:500,fontSize:14,marginBottom:8}}>{new Date(selDate+"T12:00").toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"short"})} — {todayS.length} plantão(ões)</div>
+          {todayS.length===0&&<div style={{textAlign:"center",color:"var(--color-text-secondary)",padding:"20px 0",fontSize:13}}>Nenhum plantão</div>}
+          {todayS.map(sh=><ShiftRow key={sh.id} sh={sh}/>)}
+        </>}
+        {vw==="semana"&&weekDays.map(ds=>{
+          const ss=shifts.filter(s=>s.data===ds);
+          const isSel=ds===selDate;
           return(
-            <div key={sh.id} style={{...s.card,borderLeft:`3px solid ${displayT.color}`,display:"flex",alignItems:"center",gap:10}}>
-              <div style={{flex:1,cursor:"pointer"}} onClick={()=>setModal({type:"editShift",shiftId:sh.id})}>
-                <div style={{...s.row,gap:6,marginBottom:3}}><span style={s.bdg(displayT.color,displayT.bg)}>{displayLabel}</span><span style={{fontSize:12,color:"var(--color-text-secondary)"}}>{sh.inicio}–{sh.fim}</span></div>
-                <div style={{fontSize:13,fontWeight:500}}>{acionado?mName(acionadoId(sh)!):mName(sh.membroId)}</div>
-                {sub&&!acionado&&<div style={{fontSize:12,color:t.color}}>Sub.: {(sub as any).nome}</div>}
+            <div key={ds} style={{marginBottom:10}}>
+              <div style={{fontSize:13,fontWeight:500,marginBottom:6,padding:"4px 8px",borderRadius:6,background:isSel?"#E6F1FB":"transparent",color:isSel?"#185FA5":"var(--color-text-primary)"}}>
+                {new Date(ds+"T12:00").toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"short"})} {ss.length>0&&`— ${ss.length}`}
               </div>
-              {isAdmin
-                ? <button style={{...s.out,color:"#A32D2D",fontSize:13,padding:"6px 10px",flexShrink:0}} onClick={e=>{e.stopPropagation();delShift(sh.id);}}>✕</button>
-                : <span style={{color:"var(--color-text-secondary)",fontSize:18}}>›</span>
-              }
+              {ss.length===0
+                ? <div style={{fontSize:12,color:"var(--color-text-secondary)",padding:"0 8px 4px"}}>Sem plantões</div>
+                : ss.map(sh=><ShiftRow key={sh.id} sh={sh}/>)}
             </div>
           );
         })}
@@ -502,13 +570,14 @@ export default function App(){
 
   // ── PAGAMENTO ─────────────────────────────────────────────────────────────
   function PagamentoView(){
-    const [selMem,setSelMem]=useState(isAdmin?members[0]?.id:myId);
+    const pagaveis=members.filter((x:any)=>!isVagoM(x.id));
+    const [selMem,setSelMem]=useState(isAdmin?pagaveis[0]?.id:myId);
     const [pM,setPM]=useState(calM); const [pY,setPY]=useState(calY);
     const m=mById(selMem);
     const{bruto,liquido,list}=m?calcMes(selMem,pY,pM):{bruto:0,liquido:0,list:[]};
     const byTipo: any={};
     list.forEach(sh=>{ if(!byTipo[sh.tipo]) byTipo[sh.tipo]={count:0,bruto:0,liquido:0}; const tar=(tarifas as any)[sh.tipo]||{bruto:0,liquido:0}; byTipo[sh.tipo].count++; byTipo[sh.tipo].bruto+=tar.bruto; byTipo[sh.tipo].liquido+=tar.liquido; });
-    const sorted=[...members].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
+    const sorted=[...pagaveis].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
     const myRep=savedReports.filter(r=>isAdmin||r.membId===myId);
     return(
       <div>
@@ -551,61 +620,6 @@ export default function App(){
               <button style={{...s.out,color:"#A32D2D",fontSize:12,padding:"5px 8px"}} onClick={()=>setSavedReports(p=>p.filter((x:any)=>x.id!==r.id))}>✕</button>
             </div>
           ))}
-        </>}
-      </div>
-    );
-  }
-
-  // ── RELATÓRIO ─────────────────────────────────────────────────────────────
-  function RelatorioView(){
-    const [selMem,setSelMem]=useState(isAdmin?members[0]?.id:myId);
-    const [rM,setRM]=useState(calM); const [rY,setRY]=useState(calY);
-    const m=mById(selMem);
-    const{bruto,liquido,list}=m?calcMes(selMem,rY,rM):{bruto:0,liquido:0,list:[]};
-    const sorted=[...members].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
-    const myRep=savedReports.filter(r=>isAdmin||r.membId===myId);
-    return(
-      <div>
-        {isAdmin&&<><div style={s.lbl}>Médico</div>
-          <select value={selMem} onChange={e=>setSelMem(Number(e.target.value))} style={{...s.inp,marginBottom:10}}>
-            {sorted.map((m:any)=><option key={m.id} value={m.id}>{m.nome}</option>)}
-          </select>
-        </>}
-        <div style={{...s.row,justifyContent:"space-between",marginBottom:12}}>
-          <button style={s.out} onClick={()=>{if(rM===0){setRM(11);setRY(y=>y-1);}else setRM(m=>m-1);}}>‹</button>
-          <span style={{fontWeight:500}}>{MONTHS[rM]} {rY}</span>
-          <button style={s.out} onClick={()=>{if(rM===11){setRM(0);setRY(y=>y+1);}else setRM(m=>m+1);}}>›</button>
-        </div>
-        {m&&<>
-          <div style={{...s.card,background:"#E6F1FB",border:"none"}}>
-            <div style={{fontWeight:500,fontSize:15,marginBottom:2}}>{m.nome}</div>
-            <div style={{fontSize:12,color:"#185FA5",marginBottom:8}}>CRM-SP: {m.crmsp||"—"} · {m.esp}</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-              {(()=>{ const res: any[]=[{l:"Plantões",v:String(list.length),s2:"realizados"}]; if(isAdmin) res.push({l:"Bruto",v:"R$ "+bruto.toLocaleString("pt-BR"),s2:MONTHS[rM]}); res.push({l:"Líquido",v:"R$ "+liquido.toLocaleString("pt-BR"),s2:MONTHS[rM]}); return res.map(({l,v,s2})=>(<div key={l} style={{background:"#fff",borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:10,color:"#185FA5"}}>{l}</div><div style={{fontWeight:500,fontSize:14,color:"#185FA5"}}>{v}</div><div style={{fontSize:10,color:"#185FA5",opacity:0.7}}>{s2}</div></div>)); })()}
-            </div>
-            <button style={{...s.btn("#fff"),color:"#185FA5",width:"100%",border:"0.5px solid #185FA5"}} onClick={()=>gerarRelatorio(selMem,rY,rM,isAdmin)}>📄 Exportar e abrir relatório</button>
-          </div>
-          <div style={{fontWeight:500,fontSize:14,margin:"12px 0 8px"}}>Plantões — {list.length}</div>
-          {list.map(sh=>{const t=stOf(sh.tipo); const tar=(tarifas as any)[sh.tipo]||{bruto:0,liquido:0}; return(
-            <div key={sh.id} style={{...s.card,padding:"10px 12px",borderLeft:`3px solid ${t.color}`}}>
-              <div style={{...s.row,justifyContent:"space-between"}}><span style={{fontSize:13,fontWeight:500}}>{new Date(sh.data+"T12:00").toLocaleDateString("pt-BR",{weekday:"short",day:"2-digit",month:"short"})}</span><span style={s.bdg(t.color,t.bg)}>{t.label}</span></div>
-              <div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{sh.inicio}–{sh.fim}</div>
-              <div style={{...s.row,gap:12,marginTop:4}}>
-                {isAdmin&&<div style={{fontSize:12}}>Bruto: <b style={{color:"#185FA5"}}>R$ {tar.bruto.toLocaleString("pt-BR")}</b></div>}
-                <div style={{fontSize:12}}>Líquido: <b style={{color:"#0F6E56"}}>R$ {tar.liquido.toLocaleString("pt-BR")}</b></div>
-              </div>
-            </div>
-          );})}
-          {myRep.length>0&&<>
-            <div style={{fontWeight:500,fontSize:14,margin:"16px 0 8px"}}>Relatórios salvos</div>
-            {myRep.map(r=>(
-              <div key={r.id} style={{...s.card,padding:"10px 12px",display:"flex",alignItems:"center",gap:8}}>
-                <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500}}>{r.title}</div><div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{r.date}</div></div>
-                <button style={s.btn()} onClick={()=>openHTML(r.html)}>📥 Ver</button>
-                <button style={{...s.out,color:"#A32D2D",fontSize:12,padding:"5px 8px"}} onClick={()=>setSavedReports(p=>p.filter((x:any)=>x.id!==r.id))}>✕</button>
-              </div>
-            ))}
-          </>}
         </>}
       </div>
     );
@@ -664,6 +678,7 @@ export default function App(){
     const [editId,setEditId]=useState<string|null>(null);
     const [ef,setEf]=useState({label:"",bruto:0,liquido:0});
     const [sa,setSa]=useState(""); const [sn,setSn]=useState(""); const [sc,setSc]=useState(""); const [sm,setSm]=useState("");
+    const [,bioTick]=useState(0);
     function startEdit(t: any){setEditId(t.id);setEf({label:t.label,bruto:(tarifas as any)[t.id]?.bruto||0,liquido:(tarifas as any)[t.id]?.liquido||0});}
     function saveEdit(tid: string){ setStypes(p=>p.map(x=>x.id===tid?{...x,label:ef.label}:x)); setTarifas(p=>({...p,[tid]:{bruto:Number(ef.bruto),liquido:Number(ef.liquido)}})); setEditId(null); }
     async function trocarSenha(){
@@ -761,6 +776,18 @@ export default function App(){
           })()}
           <div style={s.sep}/>
         </>}
+        <div style={{fontWeight:500,fontSize:15,margin:"12px 0 8px"}}>Login com biometria</div>
+        <div style={{...s.card,marginBottom:12}}>
+          <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:10}}>
+            Use a digital (ou Face ID) do aparelho para entrar sem digitar a senha. A biometria fica registrada apenas neste aparelho.
+          </div>
+          {bioSaved()
+            ? <div style={{...s.row,gap:8}}>
+                <span style={{...s.bdg("#0F6E56"),flex:1,textAlign:"center",padding:"8px"}}>✓ Ativada para {bioSaved().nome}</span>
+                <button style={{...s.out,color:"#A32D2D"}} onClick={()=>{localStorage.removeItem("omni_bio");bioTick(t=>t+1);window.alert("Biometria desativada.");}}>Desativar</button>
+              </div>
+            : <button style={{...s.btn(),width:"100%"}} onClick={async()=>{await bioRegister();bioTick(t=>t+1);}}>🔒 Ativar biometria neste aparelho</button>}
+        </div>
         <div style={{fontWeight:500,fontSize:15,margin:"12px 0 8px"}}>Alterar minha senha</div>
         {[["Senha atual",sa,setSa],["Nova senha",sn,setSn],["Confirmar",sc,setSc]].map(([pl,val,set]: any)=>(
           <div key={pl} style={{marginBottom:8}}><label style={s.lbl}>{pl}</label>
@@ -1118,7 +1145,6 @@ export default function App(){
         {tab==="escala"   &&<EscalaView/>}
         {tab==="checkin"  &&<CheckinView/>}
         {tab==="pagamento"&&<PagamentoView/>}
-        {tab==="relatorio"&&<RelatorioView/>}
         {tab==="equipe"   &&<EquipeView/>}
         {tab==="config"   &&<ConfigView/>}
       </div>
